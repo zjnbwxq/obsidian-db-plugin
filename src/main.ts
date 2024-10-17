@@ -1,13 +1,23 @@
-import { Plugin, Notice, TFile, MarkdownView, Events } from 'obsidian';
+import { Plugin, Notice, TFile, MarkdownView, Events, App } from 'obsidian';
 import { DatabaseView, DATABASE_VIEW_TYPE } from './DatabaseView';
 import { parseDatabase, DatabaseTable } from './databaseParser';
 import '../styles.css';
+import { PluginSettingTab, Setting } from 'obsidian';
+
+interface DatabasePluginSettings {
+  defaultSortDirection: 'asc' | 'desc';
+}
+
+const DEFAULT_SETTINGS: DatabasePluginSettings = {
+  defaultSortDirection: 'asc'
+};
 
 export default class DatabasePlugin extends Plugin {
   private databaseView: DatabaseView | null = null;
-  private lastContent: string = '';
+  settings: DatabasePluginSettings = DEFAULT_SETTINGS;
 
   async onload() {
+    await this.loadSettings();
     console.log('加载数据库插件');
 
     this.registerView(
@@ -46,6 +56,14 @@ export default class DatabasePlugin extends Plugin {
       name: '打开数据库视图',
       callback: () => this.activateView()
     });
+
+    this.addSettingTab(new DatabasePluginSettingTab(this.app, this));
+  }
+
+  async loadSettings() {
+    const loadedData = await this.loadData();
+    const parsedData = loadedData ? JSON.parse(loadedData) : {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, parsedData);
   }
 
   async parseAndUpdateView() {
@@ -98,5 +116,41 @@ export default class DatabasePlugin extends Plugin {
 
   onunload() {
     console.log('卸载数据库插件');
+  }
+
+  async saveData() {
+    // 实现保存数据的逻辑
+    await this.saveSettings();
+  }
+
+  async saveSettings() {
+    await (this.saveData as (data: any) => Promise<void>)(JSON.stringify(this.settings));
+  }
+}
+
+class DatabasePluginSettingTab extends PluginSettingTab {
+  plugin: DatabasePlugin;
+
+  constructor(app: App, plugin: DatabasePlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    let {containerEl} = this;
+    containerEl.empty();
+    containerEl.createEl('h2', {text: '数据库插件设置'});
+
+    new Setting(containerEl)
+      .setName('默认排序方向')
+      .setDesc('设置表格的默认排序方向')
+      .addDropdown(dropdown => dropdown
+        .addOption('asc', '升序')
+        .addOption('desc', '降序')
+        .setValue(this.plugin.settings.defaultSortDirection)
+        .onChange(async (value) => {
+          this.plugin.settings.defaultSortDirection = value as 'asc' | 'desc';
+          await this.plugin.saveSettings();
+        }));
   }
 }

@@ -29,7 +29,7 @@
 }
 
 .database-view-container {
-  padding: 10px;
+  padding: 20px;
 }
 
 .table-container {
@@ -65,9 +65,11 @@
 .database-table {
   width: 100%;
   border-collapse: collapse;
+  margin-bottom: 20px;
 }
 
-.database-table th, .database-table td {
+.database-table th,
+.database-table td {
   border: 1px solid var(--background-modifier-border);
   padding: 8px;
   text-align: left;
@@ -75,8 +77,7 @@
 
 .database-table th {
   background-color: var(--background-secondary);
-  cursor: pointer;
-  user-select: none;
+  font-weight: bold;
 }
 
 .database-table th:hover {
@@ -138,6 +139,8 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+
 
 
 
