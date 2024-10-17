@@ -1,5 +1,5 @@
 {
-  "name": "obsidian-db-plugin",
+  "name": "simple-database",
   "version": "1.0.0",
   "description": "Obsidian 数据库插件",
   "main": "main.js",
