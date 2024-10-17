@@ -33,11 +33,12 @@
 }
 
 .table-container {
-  margin-bottom: 20px;
+  margin-bottom: 30px;
 }
 
 .table-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
 }
@@ -68,9 +69,72 @@
 }
 
 .database-table th, .database-table td {
-  border: 1px solid var(--background-modifier-border);
+  border: 1px solid rgba(var(--background-modifier-border-rgb), 0.3);
   padding: 8px;
   text-align: left;
+}
+
+.database-table th {
+  background-color: rgba(var(--background-modifier-accent-rgb), 0.2);
+  font-weight: bold;
+}
+
+.database-table tr {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.action-menu {
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.database-table tr:hover .action-menu,
+.database-table th:hover .action-menu {
+  opacity: 1;
+}
+
+.action-menu-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action-menu-dot {
+  width: 4px;
+  height: 4px;
+  background-color: #333;
+  border-radius: 50%;
+}
+
+.action-menu-options {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px 0;
+  display: none;
+}
+
+.action-menu-option {
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.action-menu-option:hover {
+  background-color: #f0f0f5;
+}
+
+.database-table .delete-button {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.database-table tr:hover .delete-button {
+  opacity: 1;
 }
 
 .database-table th {
@@ -111,6 +175,15 @@
   margin-bottom: 20px;
 }
 
+.database-title {
+  margin: 0;
+}
+
+.database-options {
+  display: flex;
+  gap: 10px;
+}
+
 .export-controls {
   display: flex;
   align-items: center;
@@ -138,6 +211,31 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.sync-icon {
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.sync-button {
+  margin-top: 10px;
+  padding: 5px 10px;
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.sync-button:hover {
+  background-color: var(--interactive-accent-hover);
+}
+
+
+
+
+
+
 
 
 

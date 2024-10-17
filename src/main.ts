@@ -1,14 +1,24 @@
-import { Plugin, Notice, TFile, MarkdownView, Events } from 'obsidian';
+import { Plugin, Notice, TFile, MarkdownView, WorkspaceLeaf } from 'obsidian';
 import { DatabaseView, DATABASE_VIEW_TYPE } from './DatabaseView';
 import { parseDatabase, DatabaseTable } from './databaseParser';
 import '../styles.css';
 
+interface DatabasePluginSettings {
+  tables: DatabaseTable[];
+}
+
+const DEFAULT_SETTINGS: DatabasePluginSettings = {
+  tables: []
+};
+
 export default class DatabasePlugin extends Plugin {
   private databaseView: DatabaseView | null = null;
-  private lastContent: string = '';
+  settings: DatabasePluginSettings = DEFAULT_SETTINGS;
 
   async onload() {
     console.log('加载数据库插件');
+
+    await this.loadSettings();
 
     this.registerView(
       DATABASE_VIEW_TYPE,
@@ -46,6 +56,21 @@ export default class DatabasePlugin extends Plugin {
       name: '打开数据库视图',
       callback: () => this.activateView()
     });
+  }
+
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  saveSettings() {
+    (this.saveData as (data: DatabasePluginSettings) => void)(this.settings);
+  }
+
+  savePluginData() {
+    if (this.databaseView) {
+      this.settings.tables = this.databaseView.getTables();
+    }
+    this.saveSettings();
   }
 
   async parseAndUpdateView() {
@@ -99,4 +124,13 @@ export default class DatabasePlugin extends Plugin {
   onunload() {
     console.log('卸载数据库插件');
   }
+
+  async saveData() {
+    if (this.databaseView) {
+      this.settings.tables = this.databaseView.getTables();
+    }
+    await this.saveSettings();
+  }
+
+
 }
