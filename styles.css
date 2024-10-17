@@ -52,6 +52,14 @@
   height: 20px;
   font-size: 12px;
   padding: 2px;
+  margin-right: 10px;
+}
+
+.table-header .search-input {
+  flex-grow: 1;
+  height: 24px;
+  font-size: 14px;
+  padding: 2px 5px;
 }
 
 .database-table {
@@ -95,6 +103,8 @@
 .database-table th.desc .sort-indicator {
   color: var(--text-accent);
 }
+
+
 
 
 

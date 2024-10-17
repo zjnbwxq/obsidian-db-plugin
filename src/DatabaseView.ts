@@ -12,6 +12,7 @@ interface SortState {
 interface TableState {
   table: DatabaseTable;
   id: number;
+  searchTerm: string;
 }
 
 export class DatabaseView extends ItemView {
@@ -19,6 +20,7 @@ export class DatabaseView extends ItemView {
   plugin: DatabasePlugin;
   app: App;
   sortStates: Map<DatabaseTable, SortState> = new Map();
+  tableElements: Map<DatabaseTable, HTMLElement> = new Map();
 
   constructor(leaf: WorkspaceLeaf, plugin: DatabasePlugin) {
     super(leaf);
@@ -41,7 +43,7 @@ export class DatabaseView extends ItemView {
   setTables(tables: DatabaseTable[]) {
     if (Array.isArray(tables)) {
       console.log('setTables 被调用，表数量:', tables.length);
-      this.tableStates = tables.map((table, index) => ({ table, id: index + 1 }));
+      this.tableStates = tables.map((table, index) => ({ table, id: index + 1, searchTerm: '' }));
       this.renderView();
     } else {
       console.error('setTables 收到无效数据:', tables);
@@ -62,7 +64,7 @@ export class DatabaseView extends ItemView {
     }
 
     this.tableStates.forEach((tableState, index) => {
-      const { table, id } = tableState;
+      const { table, id, searchTerm } = tableState;
       if (table && table.name && Array.isArray(table.fields) && Array.isArray(table.data)) {
         const tableContainer = container.createEl('div', { cls: 'table-container' });
         const tableHeader = tableContainer.createEl('div', { cls: 'table-header' });
@@ -77,37 +79,76 @@ export class DatabaseView extends ItemView {
           });
         idInput.inputEl.addClass('id-input');
 
-        const tableEl = tableContainer.createEl('table', { cls: 'database-table' });
-        const headerRow = tableEl.createEl('tr');
-        
-        table.fields.forEach(field => {
-          const th = headerRow.createEl('th');
-          th.createEl('span', { text: field, cls: 'column-name' });
-          const sortIndicator = th.createEl('span', { cls: 'sort-indicator' });
-          
-          th.addEventListener('click', () => this.sortTable(table, field));
-          
-          const sortState = this.sortStates.get(table);
-          if (sortState && sortState.column === field) {
-            th.addClass('sorted');
-            th.addClass(sortState.direction);
-            sortIndicator.setText(sortState.direction === 'asc' ? '▲' : '▼');
-          } else {
-            sortIndicator.setText('⇅');
-          }
-        });
-        
-        const sortedData = this.getSortedData(table);
-        sortedData.forEach(row => {
-          const rowEl = tableEl.createEl('tr');
-          row.forEach(cell => {
-            rowEl.createEl('td', { text: cell });
+        const searchInput = new TextComponent(tableHeader)
+          .setPlaceholder('搜索...')
+          .setValue(searchTerm)
+          .onChange(value => {
+            this.tableStates[index].searchTerm = value;
+            this.updateTable(table);
           });
-        });
+        searchInput.inputEl.addClass('search-input');
+
+        const tableEl = this.renderTable(table);
+        tableContainer.appendChild(tableEl);
+        this.tableElements.set(table, tableEl);
       } else {
         console.error('Invalid table structure:', table);
       }
     });
+  }
+
+  renderTable(table: DatabaseTable): HTMLElement {
+    const tableEl = createEl('table', { cls: 'database-table' });
+    const headerRow = tableEl.createEl('tr');
+    
+    table.fields.forEach(field => {
+      const th = headerRow.createEl('th');
+      th.createEl('span', { text: field, cls: 'column-name' });
+      const sortIndicator = th.createEl('span', { cls: 'sort-indicator' });
+      
+      th.addEventListener('click', () => {
+        this.sortTable(table, field);
+        this.updateTable(table);
+      });
+      
+      const sortState = this.sortStates.get(table);
+      if (sortState && sortState.column === field) {
+        th.addClass('sorted');
+        th.addClass(sortState.direction);
+        sortIndicator.setText(sortState.direction === 'asc' ? '▲' : '▼');
+      } else {
+        sortIndicator.setText('⇅');
+      }
+    });
+    
+    this.renderTableBody(tableEl, table);
+    
+    return tableEl;
+  }
+
+  renderTableBody(tableEl: HTMLElement, table: DatabaseTable) {
+    const tableState = this.tableStates.find(state => state.table === table);
+    if (!tableState) return;
+
+    const tbody = tableEl.createEl('tbody');
+    const filteredAndSortedData = this.getFilteredAndSortedData(table, tableState.searchTerm);
+    filteredAndSortedData.forEach(row => {
+      const rowEl = tbody.createEl('tr');
+      row.forEach(cell => {
+        rowEl.createEl('td', { text: cell });
+      });
+    });
+  }
+
+  updateTable(table: DatabaseTable) {
+    const tableEl = this.tableElements.get(table);
+    if (!tableEl) return;
+
+    const tbody = tableEl.querySelector('tbody');
+    if (tbody) {
+      tbody.remove();
+    }
+    this.renderTableBody(tableEl, table);
   }
 
   sortTable(table: DatabaseTable, column: string) {
@@ -120,14 +161,22 @@ export class DatabaseView extends ItemView {
     this.renderView();
   }
 
-  getSortedData(table: DatabaseTable): string[][] {
+  getFilteredAndSortedData(table: DatabaseTable, searchTerm: string): string[][] {
+    let filteredData = table.data;
+    if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filteredData = table.data.filter(row => 
+        row.some(cell => cell.toLowerCase().includes(lowerSearchTerm))
+      );
+    }
+
     const sortState = this.sortStates.get(table);
-    if (!sortState) return table.data;
+    if (!sortState) return filteredData;
 
     const columnIndex = table.fields.indexOf(sortState.column);
-    if (columnIndex === -1) return table.data;
+    if (columnIndex === -1) return filteredData;
 
-    return [...table.data].sort((a, b) => {
+    return filteredData.sort((a, b) => {
       const valueA = a[columnIndex];
       const valueB = b[columnIndex];
       return this.compareValues(valueA, valueB, sortState.direction);
