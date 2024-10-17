@@ -1,0 +1,107 @@
+.database-view table th {
+  cursor: pointer;
+  position: relative;
+  padding-right: 18px; /* 为箭头留出空间 */
+}
+
+.database-view table th::after {
+  content: '\2195'; /* 默认双向箭头 */
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.5;
+}
+
+.database-view table th.asc::after {
+  content: '\2191'; /* 上箭头 */
+  opacity: 1;
+}
+
+.database-view table th.desc::after {
+  content: '\2193'; /* 下箭头 */
+  opacity: 1;
+}
+
+/* 可选：鼠标悬停效果 */
+.database-view table th:hover::after {
+  opacity: 1;
+}
+
+.database-view-container {
+  padding: 10px;
+}
+
+.table-container {
+  margin-bottom: 20px;
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.table-header h5 {
+  margin: 0;
+  margin-right: 10px;
+}
+
+.table-header .id-input {
+  width: 30px;
+  height: 20px;
+  font-size: 12px;
+  padding: 2px;
+}
+
+.database-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.database-table th, .database-table td {
+  border: 1px solid var(--background-modifier-border);
+  padding: 8px;
+  text-align: left;
+}
+
+.database-table th {
+  background-color: var(--background-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.database-table th:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.database-table th .column-name {
+  margin-right: 5px;
+}
+
+.database-table th .sort-indicator {
+  float: right;
+  opacity: 0.5;
+}
+
+.database-table th.sorted .sort-indicator {
+  opacity: 1;
+}
+
+.database-table th.asc .sort-indicator {
+  color: var(--text-accent);
+}
+
+.database-table th.desc .sort-indicator {
+  color: var(--text-accent);
+}
+
+
+
+
+
+
+
+
+
+

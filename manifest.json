@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-db-plugin",
+  "name": "Database Plugin",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "一个用于在 Obsidian 中创建和管理数据库的插件",
+  "author": "Your Name",
+  "authorUrl": "https://github.com/yourusername",
+  "isDesktopOnly": false,
+  "styles": ["styles.css"]
+}
