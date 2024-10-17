@@ -67,6 +67,10 @@ export class DatabaseView extends ItemView {
     const controlsDiv = headerDiv.createEl('div', { cls: 'database-controls' });
     this.renderExportControls(controlsDiv);
     this.renderImportControl(controlsDiv);
+
+    const syncButton = new ButtonComponent(controlsDiv)
+      .setButtonText('同步')
+      .onClick(() => this.syncToFile());
   }
 
   private renderExportControls(container: HTMLElement) {
@@ -440,6 +444,37 @@ export class DatabaseView extends ItemView {
     }
 
     return tables;
+  }
+
+  private generateMarkdownContent(): string {
+    let content = '';
+    this.tableStates.forEach(state => {
+      const { table } = state;
+      content += `db:${table.name}\n`;
+      content += table.fields.join(',') + '\n';
+      table.data.forEach(row => {
+        content += row.join(',') + '\n';
+      });
+      content += '\n';
+    });
+    return content.trim();
+  }
+
+  private async syncToFile() {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice('没有活动的文件来同步数据');
+      return;
+    }
+
+    const content = this.generateMarkdownContent();
+    try {
+      await this.app.vault.modify(activeFile, content);
+      new Notice('数据已同步到文件');
+    } catch (error) {
+      console.error('同步到文件时出错:', error);
+      new Notice('同步到文件失败');
+    }
   }
 }
 
