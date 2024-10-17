@@ -12,11 +12,7 @@ export default class DatabasePlugin extends Plugin {
 
     this.registerView(
       DATABASE_VIEW_TYPE,
-      (leaf) => {
-        console.log('创建数据库视图');
-        this.databaseView = new DatabaseView(leaf, this);
-        return this.databaseView;
-      }
+      (leaf) => new DatabaseView(leaf, this)
     );
 
     this.addCommand({
