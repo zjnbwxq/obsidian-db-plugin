@@ -126,6 +126,7 @@ export default class DatabasePlugin extends Plugin {
   }
 
   async saveData() {
+<<<<<<< Updated upstream
     if (this.databaseView) {
       this.settings.tables = this.databaseView.getTables();
     }
@@ -133,4 +134,10 @@ export default class DatabasePlugin extends Plugin {
   }
 
 
+=======
+    // 实现保存数据的逻辑
+    await this.saveSettings();
+  }
+>>>>>>> Stashed changes
 }
+111
