@@ -33,83 +33,79 @@
 }
 
 .table-container {
-  margin-bottom: 20px;
+  margin-bottom: 30px;
 }
 
 .table-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
 }
 
-.table-header h5 {
-  margin: 0;
-  margin-right: 10px;
-}
-
-.table-header .id-input {
-  width: 30px;
-  height: 20px;
-  font-size: 12px;
-  padding: 2px;
-  margin-right: 10px;
-}
-
-.table-header .search-input {
-  flex-grow: 1;
-  height: 24px;
+.search-input,
+.id-input {
   font-size: 14px;
-  padding: 2px 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+}
+
+.search-input {
+  width: 200px;
+}
+
+.id-input {
+  width: 60px;
 }
 
 .database-table {
+  margin-bottom: 30px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.database-table-header {
+  background-color: var(--background-secondary);
+  padding: 10px;
+  font-weight: bold;
+}
+
+.database-table-content {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.database-table table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 20px;
 }
 
 .database-table th,
 .database-table td {
-  border: 1px solid var(--background-modifier-border);
   padding: 8px;
-  text-align: left;
+  border: 1px solid var(--background-modifier-border);
 }
 
 .database-table th {
-  background-color: var(--background-secondary);
-  font-weight: bold;
+  background-color: var(--background-secondary-alt);
+  cursor: pointer;
 }
 
-.database-table th:hover {
-  background-color: var(--background-modifier-hover);
+.database-table tr:nth-child(even) {
+  background-color: var(--background-primary-alt);
 }
 
-.database-table th .column-name {
-  margin-right: 5px;
+.database-search {
+  margin-bottom: 10px;
 }
 
-.database-table th .sort-indicator {
-  float: right;
-  opacity: 0.5;
-}
-
-.database-table th.sorted .sort-indicator {
-  opacity: 1;
-}
-
-.database-table th.asc .sort-indicator {
-  color: var(--text-accent);
-}
-
-.database-table th.desc .sort-indicator {
-  color: var(--text-accent);
-}
-
-.database-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+.database-search input {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
 }
 
 .export-controls {
@@ -140,22 +136,30 @@
   cursor: not-allowed;
 }
 
+.database-controls {
+  display: flex;
+  gap: 10px;
+}
 
+.column-name {
+  margin-right: 5px;
+}
 
+.sort-indicator {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
 
+th:hover .sort-indicator {
+  opacity: 1;
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
+.sort-indicator.active {
+  color: var(--text-normal);
+  opacity: 1;
+}
 
 
 
