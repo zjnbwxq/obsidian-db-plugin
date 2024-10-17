@@ -1,30 +1,20 @@
-import { Plugin, Notice, TFile, MarkdownView, Events, App, PluginManifest } from 'obsidian';
+import { Plugin, Notice, TFile, MarkdownView, Events, App } from 'obsidian';
 import { DatabaseView, DATABASE_VIEW_TYPE } from './DatabaseView';
 import { parseDatabase, DatabaseTable } from './databaseParser';
 import '../styles.css';
 import { PluginSettingTab, Setting } from 'obsidian';
-import { Translations, translations, LanguageCode } from './i18n';
 
 interface DatabasePluginSettings {
   defaultSortDirection: 'asc' | 'desc';
-  language: LanguageCode;
 }
 
 const DEFAULT_SETTINGS: DatabasePluginSettings = {
-  defaultSortDirection: 'asc',
-  language: 'en'
+  defaultSortDirection: 'asc'
 };
 
 export default class DatabasePlugin extends Plugin {
   private databaseView: DatabaseView | null = null;
-  settings: DatabasePluginSettings;
-  t: Translations;
-
-  constructor(app: App, manifest: PluginManifest) {
-    super(app, manifest);
-    this.settings = DEFAULT_SETTINGS;
-    this.t = translations['en'];
-  }
+  settings: DatabasePluginSettings = DEFAULT_SETTINGS;
 
   async onload() {
     await this.loadSettings();
@@ -37,7 +27,7 @@ export default class DatabasePlugin extends Plugin {
 
     this.addCommand({
       id: 'parse-current-file',
-      name: this.t.commands.parseCurrentFile,
+      name: '解析当前文件中的数据库',
       callback: () => this.parseAndUpdateView()
     });
 
@@ -63,7 +53,7 @@ export default class DatabasePlugin extends Plugin {
 
     this.addCommand({
       id: 'open-database-view',
-      name: this.t.commands.openDatabaseView,
+      name: '打开数据库视图',
       callback: () => this.activateView()
     });
 
@@ -74,7 +64,6 @@ export default class DatabasePlugin extends Plugin {
     const loadedData = await this.loadData();
     const parsedData = loadedData ? JSON.parse(loadedData) : {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, parsedData);
-    this.t = translations[this.settings.language];
   }
 
   async parseAndUpdateView() {
@@ -136,7 +125,6 @@ export default class DatabasePlugin extends Plugin {
 
   async saveSettings() {
     await (this.saveData as (data: any) => Promise<void>)(JSON.stringify(this.settings));
-    this.t = translations[this.settings.language];
   }
 }
 
@@ -151,31 +139,18 @@ class DatabasePluginSettingTab extends PluginSettingTab {
   display(): void {
     let {containerEl} = this;
     containerEl.empty();
-    containerEl.createEl('h2', {text: this.plugin.t.settings.pluginName});
+    containerEl.createEl('h2', {text: '数据库插件设置'});
 
     new Setting(containerEl)
-      .setName(this.plugin.t.settings.defaultSortDirection)
-      .setDesc(this.plugin.t.settings.defaultSortDirectionDesc)
+      .setName('默认排序方向')
+      .setDesc('设置表格的默认排序方向')
       .addDropdown(dropdown => dropdown
-        .addOption('asc', this.plugin.t.settings.ascending)
-        .addOption('desc', this.plugin.t.settings.descending)
+        .addOption('asc', '升序')
+        .addOption('desc', '降序')
         .setValue(this.plugin.settings.defaultSortDirection)
         .onChange(async (value) => {
           this.plugin.settings.defaultSortDirection = value as 'asc' | 'desc';
           await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName(this.plugin.t.settings.language)
-      .setDesc(this.plugin.t.settings.languageDesc)
-      .addDropdown(dropdown => dropdown
-        .addOption('en', 'English')
-        .addOption('zh-CN', '简体中文')
-        .setValue(this.plugin.settings.language)
-        .onChange(async (value) => {
-          this.plugin.settings.language = value as LanguageCode;
-          await this.plugin.saveSettings();
-          this.display(); // 重新渲染设置页面以应用新语言
         }));
   }
 }
