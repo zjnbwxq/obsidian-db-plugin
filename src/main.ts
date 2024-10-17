@@ -1,8 +1,7 @@
-import { Plugin, Notice, TFile, MarkdownView, Events, App } from 'obsidian';
+import { Plugin, Notice, TFile, MarkdownView, Events, App, PluginManifest, PluginSettingTab, Setting, ButtonComponent } from 'obsidian';
 import { DatabaseView, DATABASE_VIEW_TYPE } from './DatabaseView';
 import { parseDatabase, DatabaseTable } from './databaseParser';
 import '../styles.css';
-import { PluginSettingTab, Setting } from 'obsidian';
 
 interface DatabasePluginSettings {
   defaultSortDirection: 'asc' | 'desc';
@@ -102,7 +101,6 @@ export default class DatabasePlugin extends Plugin {
     }
     workspace.revealLeaf(leaf);
     
-    // 等待视图完全加载
     await new Promise(resolve => setTimeout(resolve, 100));
     
     this.databaseView = leaf.view as DatabaseView;
@@ -119,7 +117,7 @@ export default class DatabasePlugin extends Plugin {
   }
 
   async saveData() {
-    // 实现保存数据的逻辑
+
     await this.saveSettings();
   }
 

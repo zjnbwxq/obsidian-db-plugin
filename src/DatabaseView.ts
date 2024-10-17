@@ -276,7 +276,7 @@ export class DatabaseView extends ItemView {
         const parsedData = this.parseCSV(content);
         const dbContent = this.convertToMarkdown(parsedData);
         
-        // 让用户选择导入方式
+
         const choice = await this.chooseImportMethod();
         
         if (choice === 'new') {
@@ -345,7 +345,7 @@ export class DatabaseView extends ItemView {
   }
 
   private parseCSV(content: string): string[][] {
-    // 这里使用一个简单的CSV解析逻辑，您可能需要一个更健壮的解析器来处理复杂的CSV
+
     return content.split('\n').map(line => 
       line.split(',').map(cell => cell.trim().replace(/^"(.*)"$/, '$1'))
     );
@@ -355,18 +355,17 @@ export class DatabaseView extends ItemView {
     const [header, ...rows] = data;
     const tableName = this.getTableNameFromFileName() || 'ImportedTable';
     
-    // 开始with db:表名
+
     let content = `db:${tableName}\n`;
     
-    // 添加表头
+
     content += header.join(',') + '\n';
-    
-    // 添加数据行
+
     rows.forEach(row => {
       content += row.join(',') + '\n';
     });
     
-    return content.trim(); // 移除最后的换行符
+    return content.trim(); 
   }
 
   private getTableNameFromFileName(): string | null {
@@ -414,7 +413,7 @@ export class DatabaseView extends ItemView {
 
     lines.forEach(line => {
       if (line.startsWith('db:')) {
-        // 开始新表
+
         if (currentTable) {
           tables.push(currentTable);
         }
@@ -425,16 +424,16 @@ export class DatabaseView extends ItemView {
         };
       } else if (currentTable) {
         if (currentTable.fields.length === 0) {
-          // 这是字段行
+
           currentTable.fields = line.split(',').map(field => field.trim());
         } else {
-          // 这是数据行
+
           currentTable.data.push(line.split(',').map(cell => cell.trim()));
         }
       }
     });
 
-    // 添加最后一个表
+
     if (currentTable) {
       tables.push(currentTable);
     }
