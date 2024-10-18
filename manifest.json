@@ -1,7 +1,7 @@
 {
   "id": "simple-database",
   "name": "Simple Database",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minAppVersion": "0.1.0",
   "description": "创建和管理数据库的插件",
   "author": "Xiaoqi Weng",

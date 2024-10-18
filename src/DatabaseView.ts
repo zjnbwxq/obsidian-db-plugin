@@ -1,19 +1,37 @@
-import { ItemView, WorkspaceLeaf, App, TextComponent, DropdownComponent, ButtonComponent, Notice, MarkdownView, Modal, Setting, FuzzySuggestModal, TFolder } from 'obsidian';
+import { ItemView, WorkspaceLeaf, App, TextComponent, DropdownComponent, ButtonComponent, Notice, MarkdownView, Modal, Setting, FuzzySuggestModal, TFolder, TFile } from 'obsidian';
 import { DatabaseTable, DatabaseViewInterface, TableState, SortState, DatabasePluginInterface, DatabaseField, DatabaseFieldType } from './types';
 import { debug, info, warn, error } from './utils/logger';
+import { 
+  renderBasicCell, 
+  renderDateTimeCell, 
+  renderGeospatialCell, 
+  renderScientificCell, 
+  renderAcousticCell, 
+  renderChemicalCell, 
+  renderVisualCell, 
+  renderMiscCell 
+} from './renderers';
+import { VirtualScroller } from './VirtualScroller';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import Decimal from 'decimal.js';
 
 export const DATABASE_VIEW_TYPE = 'database-view';
 
 export class DatabaseView extends ItemView implements DatabaseViewInterface {
   private tables: DatabaseTable[] = [];
   private tableStates: TableState[] = [];
-  private sortStates: Map<DatabaseTable, SortState> = new Map();
+  private sortStates: Map<DatabaseTable, { column: number; direction: 'asc' | 'desc' }> = new Map();
   private tableElements: Map<DatabaseTable, HTMLElement> = new Map();
   private exportDropdown?: DropdownComponent;
   private exportButton?: ButtonComponent;
   private importButton?: ButtonComponent;
   private plugin: DatabasePluginInterface;
   private selectedTables: Set<string> = new Set();
+  private virtualScrollers: Map<string, VirtualScroller> = new Map();
+  private pageSize: number = 100; // 每页加载的行数
+  private currentPage: number = 0;
+  private exportTypeSelect!: HTMLSelectElement;
 
   constructor(leaf: WorkspaceLeaf, plugin: DatabasePluginInterface) {
     super(leaf);
@@ -30,56 +48,34 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
   }
 
   async onOpen() {
+    debug("DatabaseView onOpen method called");
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass('database-view-container');
 
+    // 添加顶部栏
     const topBar = container.createEl('div', { cls: 'database-view-top-bar' });
+    debug(`Top bar created: ${topBar ? 'success' : 'failed'}`);
+    
+    // 添加导出类型选择下拉框
+    this.exportTypeSelect = topBar.createEl('select', { cls: 'export-type-select' });
+    this.exportTypeSelect.createEl('option', { value: 'csv', text: 'CSV' });
+    this.exportTypeSelect.createEl('option', { value: 'json', text: 'JSON' });
 
-    debug('创建顶部栏元素');
-
-    this.exportDropdown = new DropdownComponent(topBar)
-      .addOption('csv', 'CSV')
-      .addOption('json', 'JSON')
-      .setValue('csv');
-
-    debug('导出下拉菜单已创建');
-
+    // 加导出按钮
     this.exportButton = new ButtonComponent(topBar)
       .setButtonText('导出')
       .onClick(() => this.openExportModal());
+    debug(`Export button created: ${this.exportButton ? 'success' : 'failed'}`);
 
+    // 添加导入按钮
     this.importButton = new ButtonComponent(topBar)
       .setButtonText('导入')
       .onClick(() => this.importData());
+    debug(`Import button created: ${this.importButton ? 'success' : 'failed'}`);
 
-    debug('导出和导入按钮已创建');
-
-    // 确保所有按钮都被添加到顶部栏
-    topBar.appendChild(this.exportDropdown.selectEl);
-    topBar.appendChild(this.exportButton.buttonEl);
-    topBar.appendChild(this.importButton.buttonEl);
-
-    // 确保在创建按钮后调用 renderTables
+    // 渲染表格
     this.renderTables();
-
-    debug('表格已渲染');
-
-    // 添加调试代码
-    debug(`顶部栏是否存在: ${!!topBar}`);
-    debug(`顶部栏HTML: ${topBar.outerHTML}`);
-    debug(`导出下拉菜单是存在: ${!!this.exportDropdown}`);
-    debug(`导出按钮是否存在: ${!!this.exportButton}`);
-    debug(`导入按钮是否存在: ${!!this.importButton}`);
-    if (this.exportButton && this.importButton) {
-      debug(`导出按钮HTML: ${this.exportButton.buttonEl.outerHTML}`);
-      debug(`导入按钮HTML: ${this.importButton.buttonEl.outerHTML}`);
-    }
-
-    this.checkButtonVisibility();
-
-    // 在 onOpen 方法的末尾添加
-    this.app.workspace.updateOptions();
   }
 
   async onClose() {
@@ -91,13 +87,14 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
     this.tableStates = tables.map((table, index) => ({
       table,
       id: index,
-      searchTerm: ''
+      searchTerm: '',
+      currentData: table.data.slice(1, this.pageSize + 1) // 从第二行开始加载数据
     }));
     
+    debug(`Tables set: ${tables.length} tables`);
     this.renderTables();
     this.checkButtonVisibility();
 
-    // 在 setTables 方法的末尾添加
     this.app.workspace.updateOptions();
   }
 
@@ -106,21 +103,18 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
   }
 
   private renderTables() {
+    debug(`Rendering tables: ${JSON.stringify(this.tableStates)}`);
     const container = this.containerEl.children[1];
-    container.empty();
-    container.addClass('database-view-container');
-
-    // 确保顶部栏在表格之前
-    const topBar = container.createEl('div', { cls: 'database-view-top-bar' });
-    if (this.exportDropdown) topBar.appendChild(this.exportDropdown.selectEl);
-    if (this.exportButton) topBar.appendChild(this.exportButton.buttonEl);
-    if (this.importButton) topBar.appendChild(this.importButton.buttonEl);
+    const tablesContainer = container.querySelector('.database-tables-container') || container.createEl('div', { cls: 'database-tables-container' });
+    tablesContainer.empty();
 
     this.tableStates.forEach(state => {
-      const tableContainer = container.createEl('div', { cls: 'database-table-container' });
-      tableContainer.createEl('h3', { text: state.table.name });
+      const tableContainer = tablesContainer.createEl('div', { cls: 'database-table-container' });
+      
+      const tableHeader = tableContainer.createEl('div', { cls: 'database-table-header' });
+      tableHeader.createEl('h3', { text: state.table.name });
 
-      const searchInput = new TextComponent(tableContainer)
+      const searchInput = new TextComponent(tableHeader)
         .setPlaceholder('搜索...')
         .onChange(value => {
           state.searchTerm = value;
@@ -128,35 +122,47 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
         });
       searchInput.inputEl.addClass('search-input');
 
-      const tableElement = tableContainer.createEl('table', { cls: 'database-table' });
-      this.renderTable(state, tableElement);
-      this.tableElements.set(state.table, tableElement);
+      const tableElement = tableContainer.createEl('div', { cls: 'database-table' });
+      this.createVirtualScroller(state, tableElement);
+      
+      // 确保数据加载
+      this.loadPage(state, 0);
     });
   }
 
-  private renderTable(state: TableState, tableElement: HTMLElement) {
-    tableElement.empty();
-    const { table } = state;
-
-    const headerRow = tableElement.createEl('tr');
-    table.fields.forEach(field => {
-      const th = headerRow.createEl('th');
-      th.setText(field.name);
-      th.addEventListener('click', () => this.sortTable(table, field.name));
+  private createVirtualScroller(state: TableState, container: HTMLElement) {
+    console.log('Creating virtual scroller for table:', state.table.name);
+    const headerRow = container.createEl('div', { cls: 'database-row header-row' });
+    state.table.fields.forEach((field, index) => {
+      const th = headerRow.createEl('div', { cls: 'database-cell header-cell', text: field.name });
+      th.addEventListener('click', () => this.sortTable(state, index));
     });
 
-    const filteredData = table.data.filter(row =>
-      row.some(cell => String(cell).toLowerCase().includes(state.searchTerm.toLowerCase()))
-    );
-
-    filteredData.forEach(row => {
-      const tr = tableElement.createEl('tr');
-      row.forEach((cell, index) => {
-        const td = tr.createEl('td');
-        const field = table.fields[index];
-        this.renderCell(td, cell, field);
-      });
+    const virtualScroller = new VirtualScroller({
+      container: container,
+      rowHeight: 30,
+      totalRows: state.table.data.length,
+      renderRow: (index) => this.renderRow(state, index),
+      onVisibleRangeChange: (startIndex, endIndex) => this.onVisibleRangeChange(state, startIndex, endIndex),
     });
+    this.virtualScrollers.set(state.table.name, virtualScroller);
+  }
+
+  private renderRow(state: TableState, index: number) {
+    console.log('Rendering row:', index, 'for table:', state.table.name);
+    const row = state.table.data[index];
+    const rowElement = document.createElement('div');
+    rowElement.classList.add('database-row');
+
+    row.forEach((cell, cellIndex) => {
+      const cellElement = document.createElement('div');
+      cellElement.classList.add('database-cell');
+      const field = state.table.fields[cellIndex];
+      this.renderCell(cellElement, cell, field);
+      rowElement.appendChild(cellElement);
+    });
+
+    return rowElement;
   }
 
   private renderCell(td: HTMLElement, cell: any, field: DatabaseField) {
@@ -164,197 +170,323 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
       case 'string':
       case 'number':
       case 'boolean':
-        td.setText(String(cell));
+      case 'array':
+      case 'object':
+        renderBasicCell(td, cell, field);
         break;
       case 'date':
-        td.setText(new Date(cell).toLocaleDateString());
-        break;
-      case 'decimal':
-        td.setText(parseFloat(cell).toFixed(field.precision || 2));
+      case 'timedelta':
+        renderDateTimeCell(td, cell, field);
         break;
       case 'geo':
-        td.setText(`(${cell.lat}, ${cell.lng})`);
+      case 'polygon':
+        renderGeospatialCell(td, cell, field);
         break;
       case 'vector':
-        td.setText(`[${cell.join(', ')}]`);
-        break;
       case 'matrix':
-      case 'tensor':
-        td.setText(JSON.stringify(cell));
-        break;
       case 'complex':
-        td.setText(`${cell.real} + ${cell.imag}i`);
-        break;
+      case 'decimal':
       case 'uncertainty':
-        td.setText(`${cell.value} ± ${cell.uncertainty}`);
-        break;
       case 'unit':
-        td.setText(`${cell.value} ${cell.unit}`);
+      case 'timeseries':
+      case 'binary':
+      case 'formula':
+      case 'distribution':
+      case 'function':
+      case 'interval':
+      case 'currency':
+      case 'regex':
+      case 'ipaddress':
+      case 'uuid':
+      case 'version':
+      case 'bitfield':
+      case 'enum':
+      case 'fuzzy':
+      case 'quaternion':
+        renderScientificCell(td, cell, field);
         break;
-      case 'color':
-        this.renderColorCell(td, cell, field);
-        break;
-      case 'spectrum':
-      case 'histogram':
-      case 'waveform':
-        td.setText('[数据]'); // 可以根据需要显示更详细的信息
-        break;
-      case 'graph':
-        td.setText(`[图: ${cell.nodes.length}节点, ${cell.edges.length}边]`);
+      case 'audio_signal':
+      case 'frequency_response':
+      case 'sound_pressure_level':
+        renderAcousticCell(td, cell, field);
         break;
       case 'molecule':
-        td.setText(`[分子: ${cell.atoms.length}原子]`);
+      case 'chemical_formula':
+      case 'reaction':
+        renderChemicalCell(td, cell, field);
         break;
-      case 'sequence':
-        td.setText(cell.substring(0, 20) + (cell.length > 20 ? '...' : ''));
+      case 'color':
+        renderVisualCell(td, cell, field);
         break;
-      // 新增的数据类型
-      case 'audio_signal':
-        td.setText(`[音频信号: ${field.sampleRate || 'N/A'}Hz]`);
-        break;
-      case 'frequency_response':
-        td.setText(`[频率响应: ${field.frequencyRange?.[0] || 'N/A'}-${field.frequencyRange?.[1] || 'N/A'}Hz]`);
-        break;
-      case 'impulse_response':
-      case 'transfer_function':
-      case 'spectrogram':
-      case 'directivity_pattern':
-        td.setText(`[${field.type}]`);
-        break;
-      case 'acoustic_impedance':
-      case 'reverberation_time':
-      case 'noise_level':
-      case 'sound_pressure_level':
-        td.setText(`${cell} ${field.unit || ''}`);
+      case 'url':
+      case 'email':
+      case 'phone':
+      case 'tag':
+      case 'progress':
+      case 'category':
+        renderMiscCell(td, cell, field);
         break;
       default:
         td.setText(String(cell));
     }
+
+    // 添加完整信息作为 title 属性
+    const fullInfo = this.getFullInfo(cell, field);
+    td.setAttribute('title', fullInfo);
   }
 
-  private renderColorCell(td: HTMLElement, cell: any, field: DatabaseField) {
-    if (field.colorModel === 'RGB') {
-      td.setText(`RGB(${cell.r}, ${cell.g}, ${cell.b})`);
-      td.setAttr('style', `background-color: rgb(${cell.r}, ${cell.g}, ${cell.b}); color: ${this.getContrastColor(cell.r, cell.g, cell.b)}`);
-    } else {
-      td.setText(JSON.stringify(cell));
+  private getFullInfo(cell: any, field: DatabaseField): string {
+    switch (field.type) {
+      case 'string':
+      case 'number':
+      case 'boolean':
+        return String(cell);
+      case 'date':
+        return new Date(cell).toLocaleString();
+      case 'array':
+        return JSON.stringify(cell);
+      case 'object':
+        return JSON.stringify(cell, null, 2);
+      // 添加其他类型的处理...
+      default:
+        return String(cell);
     }
   }
 
-  private getContrastColor(r: number, g: number, b: number): string {
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5 ? 'black' : 'white';
-  }
+  private sortTable(state: TableState, columnIndex: number) {
+    const field = state.table.fields[columnIndex];
+    const currentDirection = this.sortStates.get(state.table)?.direction || 'asc';
+    const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
 
-  private updateTable(state: TableState) {
-    const tableElement = this.tableElements.get(state.table);
-    if (tableElement) {
-      this.renderTable(state, tableElement);
-    }
-  }
+    state.currentData = [...state.currentData].sort((a, b) => {
+      const valueA = a[columnIndex];
+      const valueB = b[columnIndex];
+      
+      let comparison = 0;
+      if (valueA < valueB) comparison = -1;
+      if (valueA > valueB) comparison = 1;
 
-  private sortTable(table: DatabaseTable, column: string) {
-    const currentSort = this.sortStates.get(table) || { column: '', direction: 'asc' };
-    const newDirection = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
-    
-    const columnIndex = table.fields.findIndex(field => field.name === column);
-    table.data.sort((a, b) => {
-      const valueA = String(a[columnIndex]).toLowerCase();
-      const valueB = String(b[columnIndex]).toLowerCase();
-      if (valueA < valueB) return newDirection === 'asc' ? -1 : 1;
-      if (valueA > valueB) return newDirection === 'asc' ? 1 : -1;
-      return 0;
+      return newDirection === 'asc' ? comparison : -comparison;
     });
 
-    this.sortStates.set(table, { column, direction: newDirection });
+    this.sortStates.set(state.table, { column: columnIndex, direction: newDirection });
     this.renderTables();
   }
 
-  private async exportData(selectedTables: string[], format: string | undefined) {
-    if (!format) return;
-
-    let content = '';
-    const tablesToExport = this.tables.filter(table => selectedTables.includes(table.name));
-
-    if (format === 'csv') {
-      content = tablesToExport.map(table => 
-        [table.fields.map(field => field.name).join(',')]
-          .concat(table.data.map(row => row.join(',')))
-          .join('\n')
-      ).join('\n\n');
-    } else if (format === 'json') {
-      content = JSON.stringify(tablesToExport, null, 2);
-    }
-
-    // 使用 Electron 的 dialog API 让用户选择保存位置
-    const { remote } = require('electron');
-    const path = await remote.dialog.showSaveDialog({
-      title: '选择保存位置',
-      defaultPath: `exported_tables.${format}`,
-      filters: [
-        { name: format.toUpperCase(), extensions: [format] },
-        { name: '所有文件', extensions: ['*'] }
-      ]
-    });
-
-    if (path.canceled) {
-      new Notice('导出已取消');
-      return;
-    }
-
-    // 使用 Obsidian 的 vault.adapter.writeBinary 方法保存文件
-    await this.app.vault.adapter.writeBinary(path.filePath, new TextEncoder().encode(content));
-
-    new Notice(`已导出 ${selectedTables.length} 个表格��� ${path.filePath}`);
-  }
-
-  private async importData() {
-    new ImportMethodModal(this.app, async (method) => {
-      if (method === 'file') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.csv,.json';
-        input.onchange = async () => {
-          const file = input.files?.[0];
-          if (file) {
-            const content = await file.text();
-            this.processImportedContent(content, file.name.endsWith('.json') ? 'json' : 'csv');
-          }
-        };
-        input.click();
-      } else if (method === 'clipboard') {
-        const content = await navigator.clipboard.readText();
-        this.processImportedContent(content);
+  private openExportModal() {
+    new ExportModal(this.app, this.tables, (selectedTables: string[]) => {
+      const format = this.exportTypeSelect.value as 'csv' | 'json';
+      if (format) {
+        this.exportData(selectedTables, format);
+      } else {
+        new Notice('请选择导出格式');
       }
     }).open();
   }
 
-  private async processImportedContent(content: string, format?: 'csv' | 'json') {
-    let tables: DatabaseTable[] = [];
-    if (!format) {
+  private exportData(selectedTables: string[], format: 'csv' | 'json') {
+    const tables = this.tables.filter(table => selectedTables.includes(table.name));
+    
+    let content = '';
+    if (format === 'csv') {
+      content = this.generateCSVContent(tables);
+    } else if (format === 'json') {
+      content = this.generateJSONContent(tables);
+    }
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    saveAs(blob, `database_export.${format}`);
+  }
+
+  private generateCSVContent(tables: DatabaseTable[]): string {
+    return tables.map(table => {
+      const header = `db:${table.name}\n${table.fields.map(f => f.type).join(',')}\n${table.fields.map(f => f.name).join(',')}`;
+      const rows = table.data.map(row => 
+        row.map((cell, index) => this.formatCellForCSV(cell, table.fields[index].type)).join(',')
+      );
+      return `${header}\n${rows.join('\n')}`;
+    }).join('\n\n');
+  }
+
+  private generateJSONContent(tables: DatabaseTable[]): string {
+    const data = tables.map(table => ({
+      name: table.name,
+      fields: table.fields,
+      data: table.data.map(row => 
+        row.map((cell, index) => this.formatCellForJSON(cell, table.fields[index].type))
+      )
+    }));
+    return JSON.stringify(data, null, 2);
+  }
+
+  private formatCellForCSV(value: string, type: DatabaseFieldType): string {
+    switch (type) {
+      case 'array':
+      case 'object':
+        return `"${value.replace(/"/g, '""')}"`;
+      case 'number':
+      case 'boolean':
+        return value;
+      default:
+        return `"${value.replace(/"/g, '""')}"`;
+    }
+  }
+
+  private formatCellForJSON(value: string, type: DatabaseFieldType): any {
+    switch (type) {
+      case 'array':
+        return value.split(';').map(item => item.trim());
+      case 'object':
+        try {
+          return JSON.parse(value);
+        } catch {
+          return value;
+        }
+      case 'number':
+        return Number(value);
+      case 'boolean':
+        return value.toLowerCase() === 'true';
+      default:
+        return value;
+    }
+  }
+
+  private async importData() {
+    new ImportMethodModal(this.app, async (method) => {
+      let content = '';
+      if (method === 'file') {
+        const file = await this.selectFile();
+        content = await file.text();
+      } else if (method === 'clipboard') {
+        content = await navigator.clipboard.readText();
+      }
+
       try {
-        JSON.parse(content);
-        format = 'json';
-      } catch {
-        format = 'csv';
+        const cleanedContent = this.cleanImportedContent(content);
+        const tables = this.parseImportedData(cleanedContent);
+        if (tables.length === 0) {
+          throw new Error('没有解析到任何表格数据');
+        }
+        
+        // 让用户选择目标 Markdown 文件
+        const targetFile = await this.selectTargetFile();
+        if (!targetFile) {
+          throw new Error('未选择目标文件');
+        }
+
+        // 将数据写入选择的文件
+        const currentContent = await this.app.vault.read(targetFile);
+        const newContent = this.formatTablesForOriginalFormat(tables);
+        await this.app.vault.modify(targetFile, currentContent + '\n\n' + newContent);
+
+        // 重新读取文件并更新视图
+        await this.reloadFileAndUpdateView(targetFile);
+
+        new Notice('数据导入成功,请手动添加表格命名和定义行');
+      } catch (error) {
+        console.error('导入失败:', error);
+        new Notice('导入失败,请检查数据格式');
+      }
+    }).open();
+  }
+
+  private cleanImportedContent(content: string): string {
+    // 去除可能被 Obsidian 识别为特殊语法的字符
+    return content.replace(/["'\[\]{}]/g, '');
+  }
+
+  private parseImportedData(content: string): DatabaseTable[] {
+    const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    if (lines.length < 1) throw new Error('导入的数据格式不正确');
+
+    const table: DatabaseTable = {
+      name: 'ImportedTable',
+      fields: [],
+      data: []
+    };
+
+    // 将所有数据作为字符串处理
+    for (let i = 0; i < lines.length; i++) {
+      const values = this.parseCSVLine(lines[i]);
+      table.data.push(values);
+    }
+
+    return [table];
+  }
+
+  private formatTablesForOriginalFormat(tables: DatabaseTable[]): string {
+    return tables.map(table => {
+      const rows = table.data.map(row => row.join(','));
+      return `db:${table.name}\n${rows.join('\n')}`;
+    }).join('\n\n');
+  }
+
+  private async selectTargetFile(): Promise<TFile | null> {
+    return new Promise((resolve) => {
+      const files = this.app.vault.getMarkdownFiles();
+      const modal = new FileSuggestModal(this.app, files, (file) => {
+        resolve(file);
+      });
+      modal.open();
+    });
+  }
+
+  private async reloadFileAndUpdateView(file: TFile) {
+    const content = await this.app.vault.read(file);
+    const tables = this.parseTablesFromMarkdown(content);
+    this.setTables(tables);
+  }
+
+  private parseTablesFromMarkdown(content: string): DatabaseTable[] {
+    const tables: DatabaseTable[] = [];
+    const lines = content.split('\n');
+    let currentTable: DatabaseTable | null = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('db:')) {
+        if (currentTable) {
+          tables.push(currentTable);
+        }
+        currentTable = {
+          name: line.substring(3).trim(),
+          fields: [],
+          data: []
+        };
+      } else if (currentTable) {
+        const values = this.parseCSVLine(line);
+        if (values.length > 0) {
+          currentTable.data.push(values);
+        }
       }
     }
 
-    if (format === 'csv') {
-      const lines = content.split('\n').map(line => line.trim()).filter(line => line);
-      const table: DatabaseTable = { name: 'Imported Table', fields: [], data: [] };
-      table.fields = lines[0].split(',').map(fieldName => ({
-        name: fieldName.trim(),
-        type: 'string', // 默认类型，可以根据需要进行更复杂的类型推断
-      }));
-      table.data = lines.slice(1).map(line => line.split(',').map(cell => cell.trim()));
-      tables = [table];
-    } else if (format === 'json') {
-      tables = JSON.parse(content);
+    if (currentTable) {
+      tables.push(currentTable);
     }
 
-    this.setTables(tables);
-    new Notice('数据导入成功');
+    return tables;
+  }
+
+  private parseCSVLine(line: string): string[] {
+    const values: string[] = [];
+    let currentValue = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(currentValue.trim().replace(/^"(.*)"$/, '$1'));
+        currentValue = '';
+      } else {
+        currentValue += char;
+      }
+    }
+    values.push(currentValue.trim().replace(/^"(.*)"$/, '$1'));
+
+    return values;
   }
 
   public insertContent(content: string) {
@@ -370,27 +502,89 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
 
   public checkButtonVisibility() {
     if (this.exportButton && this.importButton) {
-      const exportButtonRect = this.exportButton.buttonEl.getBoundingClientRect();
-      const importButtonRect = this.importButton.buttonEl.getBoundingClientRect();
-      
-      debug(`导出按钮位置: top=${exportButtonRect.top}, left=${exportButtonRect.left}, width=${exportButtonRect.width}, height=${exportButtonRect.height}`);
-      debug(`导入按钮位置: top=${importButtonRect.top}, left=${importButtonRect.left}, width=${importButtonRect.width}, height=${importButtonRect.height}`);
+      const exportButtonEl = this.exportButton.buttonEl;
+      const importButtonEl = this.importButton.buttonEl;
+      debug(`Export button visibility: ${exportButtonEl.offsetParent !== null}`);
+      debug(`Import button visibility: ${importButtonEl.offsetParent !== null}`);
     } else {
-      warn('按钮未创建');
+      warn('Export or import button not initialized');
     }
   }
 
   private checkButtonVisibilityWithDelay() {
-    setTimeout(() => {
+    (setTimeout as Window['setTimeout'])(() => {
       this.checkButtonVisibility();
     }, 100); // 100ms 延迟
   }
 
-  private openExportModal() {
-    new ExportModal(this.app, this.tables, (selectedTables) => {
-      const format = this.exportDropdown?.getValue();
-      this.exportData(selectedTables, format);
-    }).open();
+  private async loadPage(state: TableState, page: number) {
+    const start = page * this.pageSize;
+    const end = Math.min(start + this.pageSize, state.table.data.length);
+    
+    state.currentData = state.table.data.slice(start, end);
+    this.updateTable(state);
+  }
+
+  private async fetchDataRange(table: DatabaseTable, start: number, end: number): Promise<any[][]> {
+    // 这里应该实现实际的数据获取逻辑
+    // 为了示例，我们只返回一个数据子集
+    return table.data.slice(start, end);
+  }
+
+  private onVisibleRangeChange(state: TableState, startIndex: number, endIndex: number) {
+    const requiredPage = Math.floor(startIndex / this.pageSize);
+    if (requiredPage !== this.currentPage) {
+      this.loadPage(state, requiredPage);
+    }
+  }
+
+  private updateCell(state: TableState, rowIndex: number, columnIndex: number, newValue: any) {
+    state.currentData[rowIndex][columnIndex] = newValue;
+    const virtualScroller = this.virtualScrollers.get(state.table.name);
+    if (virtualScroller) {
+      virtualScroller.invalidateRow(rowIndex);
+    }
+  }
+
+  private updateTable(state: TableState) {
+    const virtualScroller = this.virtualScrollers.get(state.table.name);
+    if (virtualScroller) {
+      virtualScroller.setTotalRows(state.currentData.length);
+      virtualScroller.refresh();
+    }
+    this.updateSortIndicators(state);
+  }
+
+  private updateSortIndicators(state: TableState) {
+    const headerCells = this.containerEl.querySelectorAll('.header-cell');
+    headerCells.forEach((cell, index) => {
+      cell.classList.remove('sorted', 'asc', 'desc');
+      const sortState = this.sortStates.get(state.table);
+      if (sortState && sortState.column === index) {
+        cell.classList.add('sorted', sortState.direction);
+      }
+    });
+  }
+
+  private initializeTableState(table: DatabaseTable): TableState {
+    return {
+      table: table,
+      searchTerm: '',
+      currentData: [...table.data], // 创建数据的副本
+    };
+  }
+
+  private async selectFile(): Promise<File> {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.csv,.json';
+      input.onchange = (e: Event) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) resolve(file);
+      };
+      input.click();
+    });
   }
 }
 
@@ -493,5 +687,27 @@ class ExportModal extends Modal {
   onClose() {
     const { contentEl } = this;
     contentEl.empty();
+  }
+}
+
+class FileSuggestModal extends FuzzySuggestModal<TFile> {
+  constructor(
+    app: App,
+    private files: TFile[],
+    private onChoose: (file: TFile) => void
+  ) {
+    super(app);
+  }
+
+  getItems(): TFile[] {
+    return this.files;
+  }
+
+  getItemText(file: TFile): string {
+    return file.path;
+  }
+
+  onChooseItem(file: TFile, evt: MouseEvent | KeyboardEvent): void {
+    this.onChoose(file);
   }
 }

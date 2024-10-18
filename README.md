@@ -1,75 +1,170 @@
-# Obsidian 数据库插件
+<div align="right">
+  <a href="#Simple-Database">English</a> | <a href="#简单数据库">中文</a>
+</div>
 
-这是一个用于在 Obsidian 中创建和管理复杂数据库的插件，支持多种高级数据类型。
+# Simple Database
 
-## 功能
+This is a powerful Obsidian plugin for creating and managing complex databases, supporting various advanced data types.
+
+## Key Features
+
+- Parse database tables from Markdown files
+- Independent view for displaying and managing databases
+- Export to CSV and JSON formats
+- Import CSV and JSON files
+- Configurable default sort direction
+- Provide API for other plugins to use
+- Support multiple advanced data types, including scientific and acoustic related types
+- Use virtual scrolling technology for smooth display of large amounts of data
+
+## Supported Data Types
+
+This plugin supports a variety of advanced data types, including but not limited to:
+
+- Basic types: string, number, boolean, date
+- Scientific types: vector, matrix, complex number, time series
+- Geographic data: geographic coordinates, polygon
+- Acoustic data: audio signal, frequency response, sound pressure level
+- Chemical data: molecule, chemical formula, chemical reaction
+- Others: URL, email, phone number, tag, progress, category
+
+For detailed data type descriptions and usage methods, please refer to `DATA_TYPES_GUIDE.md`.
+
+## Installation
+
+1. Open Obsidian settings
+2. Go to "Third-party plugins"
+3. Disable safe mode
+4. Click "Browse community plugins"
+5. Search for "Database Plugin"
+6. Click install
+7. Enable the plugin
+
+## Usage
+
+### Creating a Database Table
+
+In a Markdown file, use the following format to create a database table:
+
+```
+db:TableName
+class,class,class
+field1,field2,field3
+value1,value2,value3
+value4,value5,value6
+```
+
+### Viewing and Managing Databases
+
+1. Open a Markdown file containing database tables
+2. Use the command palette (Ctrl/Cmd + P) to execute the "Open Database View" command
+3. Or click the database icon in the left sidebar
+
+In the database view, you can:
+- Export data to CSV or JSON format
+- Import CSV or JSON files
+
+## Settings
+
+In the plugin settings, you can:
+- Set the default sort direction
+- Configure display formats for specific data types
+
+## API Support
+
+This plugin provides a rich API allowing other plugins or scripts to access and manipulate database data. For detailed API documentation, please refer to `API_DOCUMENTATION.md`.
+
+Example:
+```javascript
+const databaseData = app.plugins.plugins['simple-database'].getDatabaseData();
+```
+
+## Custom Styling
+
+This plugin provides rich CSS styles. You can customize the appearance of the database view by modifying the `styles.css` file.
+
+## Developer Information
+
+This project is developed using TypeScript and built with Rollup. If you want to contribute code or build it yourself, please follow these steps:
+
+1. Clone the repository
+2. Run `npm install` to install dependencies
+3. Run `npm run build` to build the project
+
+## FAQ
+
+Q: How to use advanced data types?
+A: When creating a table, using specific field names (such as "frequency_response" or "audio_signal") will automatically be recognized as the corresponding data type.
+
+Q: How to edit data in the database?
+A: Currently, you need to edit the data in the original Markdown file. We plan to add direct editing functionality in a future version.
+
+## Feedback and Support
+
+If you encounter any issues or have suggestions for improvement, please submit an issue in the GitHub repository.
+
+## License
+
+This plugin is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Changelog
+
+### 1.1.0 (2024-10-19)
+- Added support for multiple advanced data types
+- Optimized data type recognition and display
+- Improved import/export functionality to support new data types
+- Implemented virtual scrolling for better performance with large datasets
+
+### 1.0.1 (2024-10-18)
+- Added API interface
+- Added JSON import/export functionality
+
+### 1.0.0 (2024-10-17)
+- Initial release
+- Basic database parsing and display functionality
+- CSV import/export functionality
+
+## Roadmap
+
+- [ ] Add functionality to directly edit database content
+- [ ] Add support for more advanced data types
+
+
+Welcome for community contributions. If you have any ideas or suggestions, please feel free to raise an issue or submit a pull request.
+
+---
+
+<div align="right">
+  <a href="#Simple-Database">English</a> | <a href="#简单数据库">中文</a>
+</div>
+
+# Simple Database
+
+这是一个功能强大的 Obsidian 插件,用于创建和管理复杂数据库,支持多种高级数据类型。
+
+## 主要特性
 
 - 解析 Markdown 文件中的数据库表格
-- 在独立视图中显示和管理数据库
-- 支持按列排序和表内搜索
-- 支持导出为 CSV 和 JSON 格式
-- 支持导入 CSV 和 JSON 文件
-- 可设置默认排序方向
-- 可暴露接口给其他插件
-- 支持多种高级数据类型，包括科学和声学相关类型
+- 独立视图显示和管理数据库
+- 导出为 CSV 和 JSON 格式
+- 导入 CSV 和 JSON 文件
+- 可配置默认排序方向
+- 提供 API 接口供其他插件使用
+- 支持多种高级数据类型,包括科学和声学相关类型
+- 使用虚拟滚动技术,支持大量数据的流畅显示
 
 ## 支持的数据类型
 
-本插件支持以下数据类型：
+本插件支持多种高级数据类型,包括但不限于:
 
-1. string（字符串）：文本数据。
-2. number（数字）：整数或浮点数。
-3. boolean（布尔值）：真或假。
-4. date（日期）：日期和时间信息。
-5. decimal（精确数值）：高精度数值，适用于财务计算。
-6. array（数组）：一组有序的值。
-7. object（对象）：键值对的集合。
-8. geo（地理坐标）：经纬度坐标。
-9. timeseries（时间序列）：按时间顺序排列的数据点序列。
-10. category（分类）：离散的类别或标签。
-11. binary（二进制）：原始二进制数据。
-12. vector（向量）：具有大小和方向的量。
-13. matrix（矩阵）：二维数值数组。
-14. complex（复数）：包含实部和虚部的数。
-15. uncertainty（不确定度）：测量值及其误差范围。
-16. unit（单位）：物理量的度量单位。
-17. formula（公式）：数学或化学公式。
-18. distribution（分布）：统计分布。
-19. color（颜色）：色彩信息，可以是RGB、HSL等格式。
-20. spectrum（光谱）：光的强度随波长或频率的分布。
-21. histogram（直方图）：数据分布的图形表示。
-22. tensor（张量）：多维数组。
-23. waveform（波形）：信号随时间变化的图形表示。
-24. graph（图）：由节点和边组成的数据结构。
-25. molecule（分子）：化学分子的结构信息。
-26. sequence（序列）：有序元素列表，如DNA序列。
-27. image（图像）：图像数据或元数据。
-28. function（函数）：可执行的数学函数。
-29. interval（区间）：数值范围。
-30. fuzzy（模糊集）：具有不确定成员资格的集合。
-31. quaternion（四元数）：表示三维旋转的数学结构。
-32. polygon（多边形）：由直线段围成的平面图形。
-33. timedelta（时间差）：两个时间点之间的差值。
-34. currency（货币）：货币金额及其类型。
-35. regex（正则表达式）：用于模式匹配的字符序列。
-36. url（统一资源定位符）：网络资源的地址。
-37. ipaddress（IP地址）：互联网协议地址。
-38. uuid（通用唯一识别码）：用于唯一标识信息的字符串。
-39. version（版本号）：软件版本信息。
-40. bitfield（位域）：一组位的集合，每位代表一个布尔标志。
-41. enum（枚举）：命名常量的集合。
-42. audio_signal（音频信号）：表示声音的数字信号。
-43. frequency_response（频率响应）：系统对不同频率输入的响应。
-44. impulse_response（脉冲响应）：系统对脉冲输入的响应。
-45. transfer_function（传递函数）：系统输入和输出之间的关系。
-46. spectrogram（声谱图）：声音信号频率随时间变化的视觉表示。
-47. acoustic_impedance（声阻抗）：介质对声波传播的阻力。
-48. reverberation_time（混响时间）：声音在空间中衰减到特定水平所需的时间。
-49. noise_level（噪声级别）：环境噪声的强度。
-50. sound_pressure_level（声压级）：声音强度的对数度量。
-51. directivity_pattern（指向性模式）：声源或接收器的空间辐射特性。
+- 基本类型: 字符串、数字、布尔值、日期
+- 科学类型: 向量、矩阵、复数、时间序列
+- 地理数据: 地理坐标、多边形
+- 声学数据: 音频信号、频率响应、声压级
+- 化学数据: 分子、化学式、化学反应
+- 其他: URL、电子邮件、电话号码、标签、进度、分类
 
-这些数据类型涵盖了广泛的科学、工程和日常应用场景，使得本插件能够处理各种复杂的数据结构和分析需求。
+详细的数据类型说明和使用方法请参考 `DATA_TYPES_GUIDE.md`。
 
 ## 安装
 
@@ -85,64 +180,64 @@
 
 ### 创建数据库表
 
-在 Markdown 文件中，使用以下格式创建数据库表:
+在 Markdown 文件中,使用以下格式创建数据库表:
 
 ```
 db:表名
+定义，定义，定义
 字段1,字段2,字段3
 值1,值2,值3
 值4,值5,值6
 ```
 
-### 查看数据库
+### 查看和管理数据库
 
 1. 打开包含数据库表的 Markdown 文件
 2. 使用命令面板(Ctrl/Cmd + P)执行"打开数据库视图"命令
 3. 或点击左侧栏的数据库图标
 
-### 排序和搜索
-
-- 点击列标题可以按该列排序
-- 使用表格上方的搜索框进行搜索
-
-### 导出数据
-
-1. 在数据库视图中，选择要导出的表格
-2. 选择导出格式（CSV 或 JSON）
-3. 点击"导出"按钮
-4. 选择保存位置
-
-### 导入数据
-
-1. 在数据库视图中，点击"导入"按钮
-2. 选择 CSV 或 JSON 文件
-3. 选择导入方式（新建文件或插入到当前文档）
+在数据库视图中,您可以:
+- 导出数据为 CSV 或 JSON 格式
+- 导入 CSV 或 JSON 文件
 
 ## 设置
 
-在插件设置中，你可以：
-
+在插件设置中,您可以:
 - 设置默认排序方向
 - 配置特定数据类型的显示格式
+
+## API 支持
+
+本插件提供了丰富的 API,允许其他插件或脚本访问和操作数据库数据。详细的 API 文档请参考 `API_DOCUMENTATION.md`。
+
+示例:
+```javascript
+const databaseData = app.plugins.plugins['simple-database'].getDatabaseData();
+```
+
+## 样式自定义
+
+本插件提供了丰富的 CSS 样式,您可以通过修改 `styles.css` 文件来自定义数据库视图的外观。
+
+## 开发者信息
+
+本项目使用 TypeScript 开发,使用 Rollup 进行构建。如果您想贡献代码或自行构建,请参考以下步骤:
+
+1. 克隆仓库
+2. 运行 `npm install` 安装依赖
+3. 运行 `npm run build` 构建项目
 
 ## 常见问题
 
 Q: 如何使用高级数据类型？
-A: 在创建表格时，使用特定的字段名称（如 "frequency_response" 或 "audio_signal"）会自动识别为相应的数据类型。
+A: 在创建表格时,使用特定的字段名称(如 "frequency_response" 或 "audio_signal")会自动识别为相应的数据类型。
 
 Q: 如何编辑数据库中的数据？
-A: 目前，你需要在原始 Markdown 文件中编辑数据。我们计划在未来版本中添加直接编辑功能。
-
-Q: 如何获取数据库数据？
-A: 你可以通过暴露的接口获取数据库数据。方法如下:
-
-```javascript
-const databaseData = (this.app as any).plugins.simple_database.getDatabaseData();
-```
+A: 目前,需要在原始 Markdown 文件中编辑数据。我们计划在未来版本中添加直接编辑功能。
 
 ## 反馈与支持
 
-如果您遇到任何问题或有改进建议，请在 GitHub 仓库中提交 issue。
+如果您遇到任何问题或有改进建议,请在 GitHub 仓库中提交 issue。
 
 ## 许可证
 
@@ -150,17 +245,25 @@ const databaseData = (this.app as any).plugins.simple_database.getDatabaseData()
 
 ## 更新日志
 
-### 1.0.0 (2024-10-17)
-- 初始发布
-- 基本的数据库解析和显示功能
-- 排序和搜索功能
-- CSV 导入导出功能
-
-### 1.0.1 (2024-10-18)
-- 添加暴露接口
-- 增加 JSON 导入导出
-
-### 1.1.0 (2024-10-25)
+### 1.1.0 (2024-10-19)
 - 添加多种高级数据类型支持
 - 优化数据类型识别和显示
 - 改进导入导出功能以支持新数据类型
+- 实现虚拟滚动,提高大数据量下的性能
+
+### 1.0.1 (2024-10-18)
+- 添加 API 接口
+- 增加 JSON 导入导出功能
+
+### 1.0.0 (2024-10-17)
+- 初始发布
+- 基本的数据库解析和显示功能
+- CSV 导入导出功能
+
+## 路线图
+
+- [ ] 添加直接编辑数据库内容的功能
+- [ ] 添加更多高级数据类型支持
+
+
+欢迎社区贡献,如果您有任何想法或建议,请随时提出 issue 或提交 pull request。

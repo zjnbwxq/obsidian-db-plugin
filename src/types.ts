@@ -10,8 +10,9 @@ export interface DatabaseTable {
 // 表格状态的接口
 export interface TableState {
   table: DatabaseTable;
-  id: number;
   searchTerm: string;
+  currentData: any[][];
+  // ... 其他属性 ...
 }
 
 // 排序状态的接口
@@ -68,29 +69,27 @@ export type DatabaseFieldType =
   | 'number'
   | 'boolean'
   | 'date'
-  | 'decimal'
-  | 'array'
-  | 'object'
+  | 'timedelta'
   | 'geo'
-  | 'timeseries'
-  | 'category'
-  | 'binary'
+  | 'polygon'
   | 'vector'
   | 'matrix'
   | 'complex'
+  | 'audio_signal'
+  | 'frequency_response'
+  | 'sound_pressure_level'
+  | 'molecule'
+  | 'chemical_formula'
+  | 'reaction'
+  | 'decimal'
   | 'uncertainty'
   | 'unit'
-  | 'formula'
-  | 'distribution'
   | 'color'
   | 'spectrum'
-  | 'histogram'
   | 'tensor'
-  | 'waveform'
   | 'graph'
   | 'molecule'
   | 'sequence'
-  | 'image'
   | 'function'
   | 'interval'
   | 'fuzzy'
@@ -109,12 +108,22 @@ export type DatabaseFieldType =
   | 'frequency_response'
   | 'impulse_response'
   | 'transfer_function'
-  | 'spectrogram'
   | 'acoustic_impedance'
   | 'reverberation_time'
   | 'noise_level'
   | 'sound_pressure_level'
-  | 'directivity_pattern';
+  | 'category'
+  | 'timeseries'
+  | 'formula'
+  | 'distribution'
+  | 'object'
+  | 'array'
+  | 'email'
+  | 'phone'
+  | 'tag'
+  | 'progress'
+  | 'category'
+  | 'binary';
 
 export interface DatabaseField {
   name: string;
@@ -127,5 +136,15 @@ export interface DatabaseField {
   sampleRate?: number; // 用于音频相关类型
   frequencyRange?: [number, number]; // 用于频率相关类型
   unit?: string; // 用于声学测量
-  // 可以根据需要添加更多属性
+  categories?: string | string[];
+  enumValues?: string[];
+  locale?: string;
+  currency?: string;
+  metadata?: Record<string, any>; // 用于存储其他数据类型的元信息
+}
+
+export interface ComplexDataType {
+  type: DatabaseFieldType;
+  value: any;
+  metadata: Record<string, any>;
 }

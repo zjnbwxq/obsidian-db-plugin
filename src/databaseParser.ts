@@ -2,18 +2,15 @@ import { debug, info } from './utils/logger';
 import { DatabaseTable, DatabaseField, DatabaseFieldType } from './types';
 
 export function parseDatabase(markdown: string): DatabaseTable[] {
-  debug(`开始解析数据库，输入内容: ${markdown.substring(0, 100)}...`);
   const tables: DatabaseTable[] = [];
   const lines = markdown.split('\n');
   let currentTable: DatabaseTable | null = null;
+  let isParsingFields = false;
 
   for (const line of lines) {
     const trimmedLine = line.trim();
-    debug(`处理行: ${trimmedLine}`);
     if (trimmedLine.startsWith('db:')) {
-      debug(`发现新表: ${trimmedLine}`);
       if (currentTable) {
-        inferFieldTypes(currentTable);
         tables.push(currentTable);
       }
       currentTable = {
@@ -21,26 +18,31 @@ export function parseDatabase(markdown: string): DatabaseTable[] {
         fields: [],
         data: []
       };
+      isParsingFields = true;
     } else if (currentTable) {
       const cells = trimmedLine.split(',').map(cell => cell.trim());
-      if (cells.length > 1) {
-        if (currentTable.fields.length === 0) {
-          debug(`设置字段: ${cells.join(', ')}`);
-          currentTable.fields = cells.map(cell => ({ name: cell, type: 'string' }));
-        } else {
-          debug(`添加数据行: ${cells.join(', ')}`);
-          currentTable.data.push(cells);
-        }
+      if (isParsingFields) {
+        // 解析字段类型
+        currentTable!.fields = cells.map(cell => ({ name: '', type: cell as DatabaseFieldType }));
+        isParsingFields = false;
+      } else if (currentTable!.fields[0].name === '') {
+        // 解析字段名称
+        cells.forEach((cell, index) => {
+          if (index < currentTable!.fields.length) {
+            currentTable!.fields[index].name = cell;
+          }
+        });
+      } else {
+        // 解析数据行
+        currentTable!.data.push(cells);
       }
     }
   }
 
   if (currentTable) {
-    inferFieldTypes(currentTable);
     tables.push(currentTable);
   }
 
-  info(`解析完成，结果: ${JSON.stringify(tables).substring(0, 100)}...`);
   return tables;
 }
 
@@ -107,20 +109,14 @@ function inferFieldType(fieldName: string, sampleData: string): DatabaseField {
     type = 'distribution';
   } else if (lowerFieldName.includes('spectrum')) {
     type = 'spectrum';
-  } else if (lowerFieldName.includes('histogram')) {
-    type = 'histogram';
   } else if (lowerFieldName.includes('tensor')) {
     type = 'tensor';
-  } else if (lowerFieldName.includes('waveform')) {
-    type = 'waveform';
   } else if (lowerFieldName.includes('graph')) {
     type = 'graph';
   } else if (lowerFieldName.includes('molecule')) {
     type = 'molecule';
   } else if (lowerFieldName.includes('sequence')) {
     type = 'sequence';
-  } else if (lowerFieldName.includes('image')) {
-    type = 'image';
   } else if (lowerFieldName.includes('function')) {
     type = 'function';
   } else if (lowerFieldName.includes('interval')) {
@@ -160,8 +156,6 @@ function inferFieldType(fieldName: string, sampleData: string): DatabaseField {
     type = 'impulse_response';
   } else if (lowerFieldName.includes('transfer_function')) {
     type = 'transfer_function';
-  } else if (lowerFieldName.includes('spectrogram')) {
-    type = 'spectrogram';
   } else if (lowerFieldName.includes('impedance')) {
     type = 'acoustic_impedance';
     unit = 'Pa·s/m';
@@ -174,8 +168,6 @@ function inferFieldType(fieldName: string, sampleData: string): DatabaseField {
   } else if (lowerFieldName.includes('spl') || lowerFieldName.includes('sound_pressure')) {
     type = 'sound_pressure_level';
     unit = 'dB';
-  } else if (lowerFieldName.includes('directivity')) {
-    type = 'directivity_pattern';
   }
 
   const field: DatabaseField = { name: fieldName, type };
