@@ -47,3 +47,5 @@ export {
   warn,
   error
 };
+
+setLogLevel(LogLevel.DEBUG);

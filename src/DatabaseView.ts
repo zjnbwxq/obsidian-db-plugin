@@ -1,451 +1,321 @@
-import { ItemView, WorkspaceLeaf, App, TextComponent, DropdownComponent, ButtonComponent, Notice, MarkdownView, Modal, Setting } from 'obsidian';
-import { DatabaseTable } from './databaseParser';
-import DatabasePlugin from './main';
-import { FuzzySuggestModal, TFolder } from 'obsidian';
+import { ItemView, WorkspaceLeaf, App, TextComponent, DropdownComponent, ButtonComponent, Notice, MarkdownView, Modal, Setting, FuzzySuggestModal, TFolder } from 'obsidian';
+import { DatabaseTable, DatabaseViewInterface, TableState, SortState, DatabasePluginInterface } from './types';
 import { debug, info, warn, error } from './utils/logger';
 
 export const DATABASE_VIEW_TYPE = 'database-view';
 
-interface SortState {
-  column: string;
-  direction: 'asc' | 'desc';
-}
-
-interface TableState {
-  table: DatabaseTable;
-  id: number;
-  searchTerm: string;
-}
-
-export class DatabaseView extends ItemView {
+export class DatabaseView extends ItemView implements DatabaseViewInterface {
+  private tables: DatabaseTable[] = [];
   private tableStates: TableState[] = [];
   private sortStates: Map<DatabaseTable, SortState> = new Map();
   private tableElements: Map<DatabaseTable, HTMLElement> = new Map();
   private exportDropdown?: DropdownComponent;
   private exportButton?: ButtonComponent;
   private importButton?: ButtonComponent;
-  private plugin: DatabasePlugin;
+  private plugin: DatabasePluginInterface;
+  private selectedTables: Set<string> = new Set();
 
-  constructor(leaf: WorkspaceLeaf, plugin: DatabasePlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: DatabasePluginInterface) {
     super(leaf);
     this.plugin = plugin;
+    this.tables = []; // 初始化为空数组
   }
 
-  getViewType() {
+  getViewType(): string {
     return DATABASE_VIEW_TYPE;
   }
 
-  getDisplayText() {
+  getDisplayText(): string {
     return '数据库视图';
   }
 
   async onOpen() {
-    this.renderView();
-  }
+    const container = this.containerEl.children[1];
+    container.empty();
+    container.addClass('database-view-container');
 
-  setTables(tables: DatabaseTable[]) {
-    if (Array.isArray(tables)) {
-      this.tableStates = tables.map((table, index) => ({ table, id: index + 1, searchTerm: '' }));
-      this.renderView();
-    } else {
-      error(`setTables 收到无效数据: ${JSON.stringify(tables).substring(0, 100)}...`);
+    const topBar = container.createEl('div', { cls: 'database-view-top-bar' });
+
+    debug('创建顶部栏元素');
+
+    this.exportDropdown = new DropdownComponent(topBar)
+      .addOption('csv', 'CSV')
+      .addOption('json', 'JSON')
+      .setValue('csv');
+
+    debug('导出下拉菜单已创建');
+
+    this.exportButton = new ButtonComponent(topBar)
+      .setButtonText('导出')
+      .onClick(() => this.openExportModal());
+
+    this.importButton = new ButtonComponent(topBar)
+      .setButtonText('导入')
+      .onClick(() => this.importData());
+
+    debug('导出和导入按钮已创建');
+
+    // 确保所有按钮都被添加到顶部栏
+    topBar.appendChild(this.exportDropdown.selectEl);
+    topBar.appendChild(this.exportButton.buttonEl);
+    topBar.appendChild(this.importButton.buttonEl);
+
+    // 确保在创建按钮后调用 renderTables
+    this.renderTables();
+
+    debug('表格已渲染');
+
+    // 添加调试代码
+    debug(`顶部栏是否存在: ${!!topBar}`);
+    debug(`顶部栏HTML: ${topBar.outerHTML}`);
+    debug(`导出下拉菜单是否存在: ${!!this.exportDropdown}`);
+    debug(`导出按钮是否存在: ${!!this.exportButton}`);
+    debug(`导入按钮是否存在: ${!!this.importButton}`);
+    if (this.exportButton && this.importButton) {
+      debug(`导出按钮HTML: ${this.exportButton.buttonEl.outerHTML}`);
+      debug(`导入按钮HTML: ${this.importButton.buttonEl.outerHTML}`);
     }
+
+    this.checkButtonVisibility();
+
+    // 在 onOpen 方法的末尾添加
+    this.app.workspace.updateOptions();
   }
 
-  renderView() {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.addClass('database-view-container');
-
-    this.renderHeader(contentEl);
-    this.renderTables(contentEl);
+  async onClose() {
+    // 清理工作
   }
 
-  private renderHeader(container: HTMLElement) {
-    const headerDiv = container.createEl('div', { cls: 'database-header' });
-    headerDiv.createEl('h4', { text: '数据库视图' });
+  public setTables(tables: DatabaseTable[]) {
+    this.tables = tables;
+    this.tableStates = tables.map((table, index) => ({
+      table,
+      id: index,
+      searchTerm: ''
+    }));
+    
+    this.renderTables();
+    this.checkButtonVisibility();
 
-    const controlsDiv = headerDiv.createEl('div', { cls: 'database-controls' });
-    this.renderExportControls(controlsDiv);
-    this.renderImportControl(controlsDiv);
+    // 在 setTables 方法的末尾添加
+    this.app.workspace.updateOptions();
   }
 
-  private renderExportControls(container: HTMLElement) {
-    this.exportDropdown = new DropdownComponent(container)
-      .addOption('all', '所有表格')
-      .onChange(() => {
-        if (this.exportButton) {
-          this.exportButton.setDisabled(false);
-        }
-      });
+  public getTables(): DatabaseTable[] {
+    return this.tables;
+  }
 
-    this.tableStates.forEach((state, index) => {
-      this.exportDropdown?.addOption(`${index}`, `${state.table.name} (${state.id})`);
+  private renderTables() {
+    const container = this.containerEl.children[1];
+    container.empty();
+    container.addClass('database-view-container');
+
+    // 确保顶部栏在表格之前
+    const topBar = container.createEl('div', { cls: 'database-view-top-bar' });
+    if (this.exportDropdown) topBar.appendChild(this.exportDropdown.selectEl);
+    if (this.exportButton) topBar.appendChild(this.exportButton.buttonEl);
+    if (this.importButton) topBar.appendChild(this.importButton.buttonEl);
+
+    this.tableStates.forEach(state => {
+      const tableContainer = container.createEl('div', { cls: 'database-table-container' });
+      tableContainer.createEl('h3', { text: state.table.name });
+
+      const searchInput = new TextComponent(tableContainer)
+        .setPlaceholder('搜索...')
+        .onChange(value => {
+          state.searchTerm = value;
+          this.updateTable(state);
+        });
+      searchInput.inputEl.addClass('search-input');
+
+      const tableElement = tableContainer.createEl('table', { cls: 'database-table' });
+      this.renderTable(state, tableElement);
+      this.tableElements.set(state.table, tableElement);
     });
-
-    this.exportButton = new ButtonComponent(container)
-      .setButtonText('导出 CSV')
-      .onClick(() => this.exportTablesToCSV())
-      .setDisabled(true);
   }
 
-  private renderTables(container: HTMLElement) {
-    if (this.tableStates.length === 0) {
-      container.createEl('p', { text: '还没有解析到任何数据库表' });
-      return;
-    }
+  private renderTable(state: TableState, tableElement: HTMLElement) {
+    tableElement.empty();
+    const { table } = state;
 
-    this.tableStates.forEach(this.renderTableContainer.bind(this));
-  }
-
-  private renderTableContainer(tableState: TableState, index: number) {
-    const { contentEl } = this;
-    const { table, id, searchTerm } = tableState;
-
-    const tableContainer = contentEl.createEl('div', { cls: 'table-container' });
-    const tableHeader = tableContainer.createEl('div', { cls: 'table-header' });
-    tableHeader.createEl('h5', { text: table.name });
-
-    this.renderTableControls(tableHeader, tableState, index);
-
-    const tableEl = this.renderTable(table);
-    tableContainer.appendChild(tableEl);
-    this.tableElements.set(table, tableEl);
-  }
-
-  private renderTableControls(container: HTMLElement, tableState: TableState, index: number) {
-    new TextComponent(container)
-      .setPlaceholder('编号')
-      .setValue(tableState.id.toString())
-      .onChange(value => {
-        this.tableStates[index].id = parseInt(value) || 0;
-      })
-      .inputEl.addClass('id-input');
-
-    new TextComponent(container)
-      .setPlaceholder('搜...')
-      .setValue(tableState.searchTerm)
-      .onChange(value => {
-        this.tableStates[index].searchTerm = value;
-        this.updateTable(tableState.table);
-      })
-      .inputEl.addClass('search-input');
-  }
-
-  private renderTable(table: DatabaseTable): HTMLElement {
-    const tableEl = createEl('table', { cls: 'database-table' });
-    this.renderTableHeader(tableEl, table);
-    this.renderTableBody(tableEl, table);
-    return tableEl;
-  }
-
-  private renderTableHeader(tableEl: HTMLElement, table: DatabaseTable) {
-    const headerRow = tableEl.createEl('tr');
+    const headerRow = tableElement.createEl('tr');
     table.fields.forEach(field => {
       const th = headerRow.createEl('th');
-      th.createEl('span', { text: field, cls: 'column-name' });
-      const sortIndicator = th.createEl('span', { cls: 'sort-indicator' });
+      const headerContent = th.createEl('div', { cls: 'header-content' });
+      headerContent.createEl('span', { text: field, cls: 'column-name' });
+      const sortIndicator = headerContent.createEl('span', { cls: 'sort-indicator' });
       
-      th.addEventListener('click', () => this.handleSort(table, field));
-      
-      this.updateSortIndicator(th, sortIndicator, table, field);
+      const currentSort = this.sortStates.get(table);
+      if (currentSort && currentSort.column === field) {
+        th.addClass('sorted');
+        th.addClass(currentSort.direction);
+        sortIndicator.setText(currentSort.direction === 'asc' ? '▲' : '▼');
+      } else {
+        sortIndicator.setText('⇅');
+      }
+
+      th.addEventListener('click', () => this.sortTable(table, field));
+    });
+
+    const filteredData = table.data.filter(row =>
+      row.some(cell => cell.toLowerCase().includes(state.searchTerm.toLowerCase()))
+    );
+
+    filteredData.forEach(row => {
+      const tr = tableElement.createEl('tr');
+      row.forEach(cell => {
+        tr.createEl('td', { text: cell });
+      });
     });
   }
 
-  private updateSortIndicator(th: HTMLElement, sortIndicator: HTMLElement, table: DatabaseTable, field: string) {
-    const sortState = this.sortStates.get(table);
-    if (sortState && sortState.column === field) {
-      th.addClass('sorted');
-      th.addClass(sortState.direction);
-      sortIndicator.setText(sortState.direction === 'asc' ? '▲' : '▼');
-    } else {
-      sortIndicator.setText('⇅');
+  private updateTable(state: TableState) {
+    const tableElement = this.tableElements.get(state.table);
+    if (tableElement) {
+      this.renderTable(state, tableElement);
     }
   }
 
-  private handleSort(table: DatabaseTable, column: string) {
-    const currentSortState = this.sortStates.get(table);
-    if (currentSortState && currentSortState.column === column) {
-      currentSortState.direction = currentSortState.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-      this.sortStates.set(table, { column, direction: 'asc' });
-    }
-    this.updateTable(table);
-  }
-
-  private renderTableBody(tableEl: HTMLElement, table: DatabaseTable) {
-    const tbody = tableEl.createEl('tbody');
-    const tableState = this.tableStates.find(state => state.table === table);
-    if (!tableState) return;
-
-    const filteredAndSortedData = this.getFilteredAndSortedData(table, tableState.searchTerm);
-    filteredAndSortedData.forEach(row => {
-      const rowEl = tbody.createEl('tr');
-      row.forEach(cell => rowEl.createEl('td', { text: cell }));
-    });
-  }
-
-  private updateTable(table: DatabaseTable) {
-    const tableEl = this.tableElements.get(table);
-    if (!tableEl) return;
-
-    tableEl.querySelector('tbody')?.remove();
-    this.renderTableBody(tableEl, table);
-  }
-
-  private getFilteredAndSortedData(table: DatabaseTable, searchTerm: string): string[][] {
-    let filteredData = this.filterData(table.data, searchTerm);
-    return this.sortData(filteredData, table);
-  }
-
-  private filterData(data: string[][], searchTerm: string): string[][] {
-    if (!searchTerm) return data;
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    return data.filter(row => row.some(cell => cell.toLowerCase().includes(lowerSearchTerm)));
-  }
-
-  private sortData(data: string[][], table: DatabaseTable): string[][] {
-    const sortState = this.sortStates.get(table);
-    if (!sortState) return data;
-
-    const columnIndex = table.fields.indexOf(sortState.column);
-    if (columnIndex === -1) return data;
-
-    return data.sort((a, b) => this.compareValues(a[columnIndex], b[columnIndex], sortState.direction));
-  }
-
-  private compareValues(valueA: string, valueB: string, direction: 'asc' | 'desc'): number {
-    const numA = Number(valueA);
-    const numB = Number(valueB);
-    if (!isNaN(numA) && !isNaN(numB)) {
-      return direction === 'asc' ? numA - numB : numB - numA;
-    }
+  private sortTable(table: DatabaseTable, column: string) {
+    const currentSort = this.sortStates.get(table) || { column: '', direction: 'asc' };
+    const newDirection = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
     
-    return direction === 'asc' 
-      ? valueA.localeCompare(valueB) 
-      : valueB.localeCompare(valueA);
+    const columnIndex = table.fields.indexOf(column);
+    table.data.sort((a, b) => {
+      const valueA = a[columnIndex].toLowerCase();
+      const valueB = b[columnIndex].toLowerCase();
+      if (valueA < valueB) return newDirection === 'asc' ? -1 : 1;
+      if (valueA > valueB) return newDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    this.sortStates.set(table, { column, direction: newDirection });
+    this.renderTables();
   }
 
-  private exportTablesToCSV() {
-    if (!this.exportDropdown) return;
+  private async exportData(selectedTables: string[], format: string | undefined) {
+    if (!format) return;
 
-    const selectedValue = this.exportDropdown.getValue();
-    const tablesToExport = selectedValue === 'all' 
-      ? this.tableStates.map(state => state.table)
-      : [this.tableStates[parseInt(selectedValue)]?.table].filter(Boolean);
+    let content = '';
+    const tablesToExport = this.tables.filter(table => selectedTables.includes(table.name));
 
-    if (tablesToExport.length === 0) {
-      error('No tables to export');
+    if (format === 'csv') {
+      content = tablesToExport.map(table => 
+        [table.fields.join(',')]
+          .concat(table.data.map(row => row.join(',')))
+          .join('\n')
+      ).join('\n\n');
+    } else if (format === 'json') {
+      content = JSON.stringify(tablesToExport, null, 2);
+    }
+
+    // 使用 Electron 的 dialog API 让用户选择保存位置
+    const { remote } = require('electron');
+    const path = await remote.dialog.showSaveDialog({
+      title: '选择保存位置',
+      defaultPath: `exported_tables.${format}`,
+      filters: [
+        { name: format.toUpperCase(), extensions: [format] },
+        { name: '所有文件', extensions: ['*'] }
+      ]
+    });
+
+    if (path.canceled) {
+      new Notice('导出已取消');
       return;
     }
 
-    const csvContent = tablesToExport.map(this.tableToCSV).join('\n\n');
-    this.downloadCSV(csvContent, tablesToExport.length > 1 ? 'database_tables.csv' : `${tablesToExport[0].name}.csv`);
+    // 使用 Obsidian 的 vault.adapter.writeBinary 方法保存文件
+    await this.app.vault.adapter.writeBinary(path.filePath, new TextEncoder().encode(content));
+
+    new Notice(`已导出 ${selectedTables.length} 个表格到 ${path.filePath}`);
   }
 
-  private tableToCSV(table: DatabaseTable): string {
-    const headers = table.fields.join(',');
-    const dataRows = table.data.map(row => 
-      row.map(cell => 
-        cell.includes(',') || cell.includes('"') || cell.includes('\n') 
-          ? `"${cell.replace(/"/g, '""')}"`
-          : cell
-      ).join(',')
-    );
-    return [table.name, headers, ...dataRows].join('\n');
-  }
-
-  private downloadCSV(content: string, filename: string) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  private async importCSV() {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.csv';
-
-    fileInput.onchange = async (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const content = await this.readFileContent(file);
-        const parsedData = this.parseCSV(content);
-        const dbContent = this.convertToMarkdown(parsedData);
-        
-
-        const choice = await this.chooseImportMethod();
-        
-        if (choice === 'new') {
-          await this.createNewFileWithContent(file.name, dbContent);
-        } else if (choice === 'insert') {
-          await this.insertContentIntoCurrentFile(dbContent);
-        }
+  private async importData() {
+    new ImportMethodModal(this.app, async (method) => {
+      if (method === 'file') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.csv,.json';
+        input.onchange = async () => {
+          const file = input.files?.[0];
+          if (file) {
+            const content = await file.text();
+            this.processImportedContent(content, file.name.endsWith('.json') ? 'json' : 'csv');
+          }
+        };
+        input.click();
+      } else if (method === 'clipboard') {
+        const content = await navigator.clipboard.readText();
+        this.processImportedContent(content);
       }
-    };
-
-    fileInput.click();
+    }).open();
   }
 
-  private async chooseImportMethod(): Promise<'new' | 'insert' | null> {
-    return new Promise((resolve) => {
-      const modal = new ImportMethodModal(this.app, (result) => {
-        resolve(result);
-      });
-      modal.open();
-    });
-  }
-
-  private async createNewFileWithContent(originalFileName: string, content: string) {
-    const folderPath = await this.selectFolder();
-    if (folderPath) {
-      const tableName = originalFileName.replace('.csv', '');
-      const fileName = `${tableName}.md`;
+  private async processImportedContent(content: string, format?: 'csv' | 'json') {
+    let tables: DatabaseTable[] = [];
+    if (!format) {
       try {
-        await this.app.vault.create(`${folderPath}/${fileName}`, content);
-        new Notice(`已创建数据库笔记: ${fileName}`);
-      } catch (err) {
-        error(`创建数据库笔记时出错: ${err instanceof Error ? err.message : String(err)}`);
-        if (err instanceof Error) {
-          new Notice(`创建数据库笔记失败: ${err.message}`);
-        } else {
-          new Notice('创建数据库笔记失败: 未知错误');
-        }
+        JSON.parse(content);
+        format = 'json';
+      } catch {
+        format = 'csv';
       }
     }
-  }
 
-  private async insertContentIntoCurrentFile(content: string) {
-    const activeView = this.app.workspace.getActiveViewOfType(DatabaseView);
-    if (activeView) {
-      activeView.insertContent(content);
-    } else {
-      const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-      if (markdownView) {
-        const editor = markdownView.editor;
-        const cursor = editor.getCursor();
-        editor.replaceRange(content + '\n\n', cursor);
-        new Notice('已在当前 Markdown 文档中插入数据库内容');
-      } else {
-        new Notice('无法插入内容：没有打开的数据库视图或 Markdown 文档');
-      }
+    if (format === 'csv') {
+      const lines = content.split('\n').map(line => line.trim()).filter(line => line);
+      const table: DatabaseTable = { name: 'Imported Table', fields: [], data: [] };
+      table.fields = lines[0].split(',').map(field => field.trim());
+      table.data = lines.slice(1).map(line => line.split(',').map(cell => cell.trim()));
+      tables = [table];
+    } else if (format === 'json') {
+      tables = JSON.parse(content);
     }
-  }
 
-  private readFileContent(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string);
-      reader.onerror = (e) => reject(e);
-      reader.readAsText(file);
-    });
-  }
-
-  private parseCSV(content: string): string[][] {
-
-    return content.split('\n').map(line => 
-      line.split(',').map(cell => cell.trim().replace(/^"(.*)"$/, '$1'))
-    );
-  }
-
-  private convertToMarkdown(data: string[][]): string {
-    const [header, ...rows] = data;
-    const tableName = this.getTableNameFromFileName() || 'ImportedTable';
-    
-
-    let content = `db:${tableName}\n`;
-    
-
-    content += header.join(',') + '\n';
-
-    rows.forEach(row => {
-      content += row.join(',') + '\n';
-    });
-    
-    return content.trim(); 
-  }
-
-  private getTableNameFromFileName(): string | null {
-    const file = this.app.workspace.getActiveFile();
-    return file ? file.basename.replace('.csv', '') : null;
-  }
-
-  private async selectFolder(): Promise<string | null> {
-    return new Promise((resolve) => {
-      const modal = new FolderSuggestModal(this.app, (folder) => {
-        resolve(folder ? folder.path : null);
-      });
-      modal.open();
-    });
-  }
-
-  private renderImportControl(container: HTMLElement) {
-    this.importButton = new ButtonComponent(container)
-      .setButtonText('导入 CSV')
-      .onClick(() => this.importCSV());
+    this.setTables(tables);
+    new Notice('数据导入成功');
   }
 
   public insertContent(content: string) {
-    debug(`Inserting content into DatabaseView: ${content.substring(0, 100)}...`);
-    const newTables = this.parseCSVContent(content);
-    if (newTables.length > 0) {
-      newTables.forEach(newTable => {
-        this.tableStates.push({
-          table: newTable,
-          id: Date.now(),
-          searchTerm: ''
-        });
-      });
-      this.renderView();
-      new Notice(`已在数据库视图中插入 ${newTables.length} 个新表格`);
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView) {
+      const editor = activeView.editor;
+      const cursor = editor.getCursor();
+      editor.replaceRange(content, cursor);
     } else {
-      warn('无法解析导入的内容');
-      new Notice('无法解析导入的内容');
+      new Notice('请先打开一个 Markdown 文件');
     }
   }
 
-  private parseCSVContent(content: string): DatabaseTable[] {
-    const lines = content.trim().split('\n');
-    const tables: DatabaseTable[] = [];
-    let currentTable: DatabaseTable | null = null;
-
-    lines.forEach(line => {
-      if (line.startsWith('db:')) {
-
-        if (currentTable) {
-          tables.push(currentTable);
-        }
-        currentTable = {
-          name: line.slice(3).trim(),
-          fields: [],
-          data: []
-        };
-      } else if (currentTable) {
-        if (currentTable.fields.length === 0) {
-
-          currentTable.fields = line.split(',').map(field => field.trim());
-        } else {
-
-          currentTable.data.push(line.split(',').map(cell => cell.trim()));
-        }
-      }
-    });
-
-
-    if (currentTable) {
-      tables.push(currentTable);
+  public checkButtonVisibility() {
+    if (this.exportButton && this.importButton) {
+      const exportButtonRect = this.exportButton.buttonEl.getBoundingClientRect();
+      const importButtonRect = this.importButton.buttonEl.getBoundingClientRect();
+      
+      debug(`导出按钮位置: top=${exportButtonRect.top}, left=${exportButtonRect.left}, width=${exportButtonRect.width}, height=${exportButtonRect.height}`);
+      debug(`导入按钮位置: top=${importButtonRect.top}, left=${importButtonRect.left}, width=${importButtonRect.width}, height=${importButtonRect.height}`);
+    } else {
+      warn('按钮未创建');
     }
+  }
 
-    return tables;
+  private checkButtonVisibilityWithDelay() {
+    setTimeout(() => {
+      this.checkButtonVisibility();
+    }, 100); // 100ms 延迟
+  }
+
+  private openExportModal() {
+    new ExportModal(this.app, this.tables, (selectedTables) => {
+      const format = this.exportDropdown?.getValue();
+      this.exportData(selectedTables, format);
+    }).open();
   }
 }
 
 class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
-  constructor(app: App, private onChooseFolder: (folder: TFolder | null) => void) {
+  constructor(app: App, private callback: (folder: TFolder) => void) {
     super(app);
   }
 
@@ -454,53 +324,94 @@ class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
       .filter((file): file is TFolder => file instanceof TFolder);
   }
 
-  getItemText(item: TFolder): string {
-    return item.path;
+  getItemText(folder: TFolder): string {
+    return folder.path;
   }
 
-  onChooseItem(item: TFolder, evt: MouseEvent | KeyboardEvent): void {
-    this.onChooseFolder(item);
+  onChooseItem(folder: TFolder, evt: MouseEvent | KeyboardEvent): void {
+    this.callback(folder);
   }
-}
-
-function isError(error: unknown): error is Error {
-  return error instanceof Error;
 }
 
 class ImportMethodModal extends Modal {
-  result: 'new' | 'insert' | null = null;
-
-  constructor(app: App, private onChoose: (result: 'new' | 'insert' | null) => void) {
+  constructor(app: App, private callback: (method: 'file' | 'clipboard') => void) {
     super(app);
   }
 
   onOpen() {
     const { contentEl } = this;
-
+    contentEl.empty();
     contentEl.createEl('h2', { text: '选择导入方式' });
 
     new Setting(contentEl)
-      .setName('创建新文件')
-      .setDesc('将导入的数据创建为新的 Markdown 文件')
-      .addButton((btn) =>
-        btn.setButtonText('选择').onClick(() => {
-          this.result = 'new';
+      .setName('从文件导入')
+      .setDesc('选择一个 CSV 或 JSON 文件')
+      .addButton(button => button
+        .setButtonText('选择文件')
+        .onClick(() => {
           this.close();
-        })
-      );
+          this.callback('file');
+        }));
 
     new Setting(contentEl)
-      .setName('插入到当前文档')
-      .setDesc('将导入的数据插入到当前文档的光标位置')
-      .addButton((btn) =>
-        btn.setButtonText('选择').onClick(() => {
-          this.result = 'insert';
+      .setName('从剪贴板导入')
+      .setDesc('从剪贴板粘贴 CSV 或 JSON 数据')
+      .addButton(button => button
+        .setButtonText('从剪贴板导入')
+        .onClick(() => {
           this.close();
-        })
-      );
+          this.callback('clipboard');
+        }));
   }
 
   onClose() {
-    this.onChoose(this.result);
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+}
+
+class ExportModal extends Modal {
+  private selectedTables: Set<string> = new Set();
+
+  constructor(
+    app: App,
+    private tables: DatabaseTable[],
+    private onSubmit: (selectedTables: string[]) => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl('h2', { text: '选择要导出的表格' });
+
+    this.tables.forEach(table => {
+      new Setting(contentEl)
+        .setName(table.name)
+        .addToggle(toggle => toggle
+          .setValue(this.selectedTables.has(table.name))
+          .onChange(value => {
+            if (value) {
+              this.selectedTables.add(table.name);
+            } else {
+              this.selectedTables.delete(table.name);
+            }
+          }));
+    });
+
+    new Setting(contentEl)
+      .addButton(button => button
+        .setButtonText('导出')
+        .setCta()
+        .onClick(() => {
+          this.onSubmit(Array.from(this.selectedTables));
+          this.close();
+        }));
+  }
+
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
   }
 }

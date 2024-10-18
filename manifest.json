@@ -1,11 +1,11 @@
 {
   "id": "simple-database",
   "name": "Simple Database",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "0.1.0",
   "description": "创建和管理数据库的插件",
   "author": "Xiaoqi Weng",
   "authorUrl": "https://github.com/zjnbwxq",
-  "isDesktopOnly": false,
+  "isDesktopOnly": true,
   "styles": ["styles.css"]
 }

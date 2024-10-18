@@ -29,7 +29,11 @@
 }
 
 .database-view-container {
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px;
+  position: relative;
 }
 
 .table-container {
@@ -140,19 +144,89 @@
   cursor: not-allowed;
 }
 
+.database-view-top-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 10px;
+  background-color: var(--background-secondary);
+  /* border: 1px solid red; */
+}
 
+.database-view-top-bar > * {
+  margin-left: 10px !important;
+  display: inline-block !important;
+}
 
+.database-view-top-bar button {
+  background-color: var(--interactive-accent) !important;
+  color: var(--text-on-accent) !important;
+  border: none !important;
+  padding: 6px 12px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+  min-width: 60px !important;
+  min-height: 30px !important;
+  border: 1px solid blue !important; /* 用于调试 */
+}
 
+.database-view-top-bar .dropdown {
+  margin-right: 10px !important;
+}
 
+.database-table-container h3 {
+  display: inline;
+  margin-left: 10px;
+}
 
+.database-table-container {
+  margin-bottom: 20px;
+}
 
+.database-table {
+  width: 100%;
+  border-collapse: collapse;
+}
 
+.database-table th, .database-table td {
+  border: 1px solid var(--background-modifier-border);
+  padding: 8px;
+  text-align: left;
+}
 
+.database-table th {
+  background-color: var(--background-secondary);
+  font-weight: bold;
+  cursor: pointer;
+}
 
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
+.column-name {
+  margin-right: 5px;
+}
 
+.sort-indicator {
+  opacity: 0.5;
+}
 
+.sorted .sort-indicator {
+  opacity: 1;
+}
 
+.asc .sort-indicator, .desc .sort-indicator {
+  color: var(--text-accent);
+}
+
+.search-input {
+  margin-bottom: 10px;
+  width: 100%;
+}
 
 
 

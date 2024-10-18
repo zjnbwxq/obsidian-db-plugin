@@ -1,19 +1,16 @@
 import { Plugin, Notice, TFile, MarkdownView, Events, App, PluginManifest, PluginSettingTab, Setting, ButtonComponent } from 'obsidian';
 import { DatabaseView, DATABASE_VIEW_TYPE } from './DatabaseView';
-import { parseDatabase, DatabaseTable } from './databaseParser';
+import { parseDatabase } from './databaseParser';
 import { debug, info, warn, error } from './utils/logger';
 import '../styles.css';
-
-interface DatabasePluginSettings {
-  defaultSortDirection: 'asc' | 'desc';
-}
+import { DatabasePluginSettings, SimpleDatabasePlugin, DatabaseTable, DatabaseViewInterface } from './types';
 
 const DEFAULT_SETTINGS: DatabasePluginSettings = {
   defaultSortDirection: 'asc'
 };
 
-export default class DatabasePlugin extends Plugin {
-  private databaseView: DatabaseView | null = null;
+export default class DatabasePlugin extends Plugin implements SimpleDatabasePlugin {
+  private databaseView: DatabaseViewInterface | null = null;
   settings: DatabasePluginSettings = DEFAULT_SETTINGS;
 
   async onload() {
@@ -58,6 +55,9 @@ export default class DatabasePlugin extends Plugin {
     });
 
     this.addSettingTab(new DatabasePluginSettingTab(this.app, this));
+
+    // 暴露接口给其他插件
+    (this.app as any).plugins.simple_database = this;
   }
 
   async loadSettings() {
@@ -104,7 +104,7 @@ export default class DatabasePlugin extends Plugin {
     
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    this.databaseView = leaf.view as DatabaseView;
+    this.databaseView = leaf.view as DatabaseViewInterface;
     info(`数据库视图已激活: ${this.databaseView ? 'success' : 'fail'}`);
     
     if (!this.databaseView) {
@@ -115,6 +115,9 @@ export default class DatabasePlugin extends Plugin {
 
   onunload() {
     info('卸载数据库插件');
+
+    // 移除暴露的接口
+    delete (this.app as any).plugins.simple_database;
   }
 
   async saveData() {
@@ -123,6 +126,13 @@ export default class DatabasePlugin extends Plugin {
 
   async saveSettings() {
     await (this.saveData as (data: any) => Promise<void>)(JSON.stringify(this.settings));
+  }
+
+  public getDatabaseData(): DatabaseTable[] | null {
+    if (this.databaseView) {
+      return this.databaseView.getTables();
+    }
+    return null;
   }
 }
 
