@@ -3,7 +3,7 @@ import { DatabaseView, DATABASE_VIEW_TYPE } from './DatabaseView';
 import { parseDatabase } from './databaseParser';
 import { debug, info, warn, error } from './utils/logger';
 import '../styles.css';
-import { DatabasePluginSettings, SimpleDatabasePlugin, DatabaseTable, DatabaseViewInterface } from './types';
+import { DatabasePluginSettings, SimpleDatabasePlugin, DatabaseTable, DatabaseField, DatabaseViewInterface } from './types';
 
 const DEFAULT_SETTINGS: DatabasePluginSettings = {
   defaultSortDirection: 'asc'
@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: DatabasePluginSettings = {
 export default class DatabasePlugin extends Plugin implements SimpleDatabasePlugin {
   private databaseView: DatabaseViewInterface | null = null;
   settings: DatabasePluginSettings = DEFAULT_SETTINGS;
+  private dataUpdateCallbacks: ((updatedTables: string[]) => void)[] = [];
 
   async onload() {
     await this.loadSettings();
@@ -133,6 +134,85 @@ export default class DatabasePlugin extends Plugin implements SimpleDatabasePlug
       return this.databaseView.getTables();
     }
     return null;
+  }
+
+  public queryData(tableName: string, conditions: object): any[][] | null {
+    const tables = this.getDatabaseData();
+    if (!tables) return null;
+
+    const table = tables.find(t => t.name === tableName);
+    if (!table) return null;
+
+    return table.data.filter(row => {
+      return Object.entries(conditions).every(([key, value]) => {
+        const index = table.fields.findIndex(f => f.name === key);
+        return row[index] === value;
+      });
+    });
+  }
+
+  public getTableSchema(tableName: string): DatabaseField[] | null {
+    const tables = this.getDatabaseData();
+    if (!tables) return null;
+
+    const table = tables.find(t => t.name === tableName);
+    return table ? table.fields : null;
+  }
+
+  public onDataUpdate(callback: (updatedTables: string[]) => void): void {
+    this.dataUpdateCallbacks.push(callback);
+  }
+
+  public getColumnStats(tableName: string, columnName: string): { min: number; max: number; average: number; median: number; } | null {
+    const tables = this.getDatabaseData();
+    if (!tables) return null;
+
+    const table = tables.find(t => t.name === tableName);
+    if (!table) return null;
+
+    const columnIndex = table.fields.findIndex(f => f.name === columnName);
+    if (columnIndex === -1) return null;
+
+    const columnData = table.data.map(row => parseFloat(row[columnIndex])).filter(value => !isNaN(value));
+    if (columnData.length === 0) return null;
+
+    columnData.sort((a, b) => a - b);
+    const min = columnData[0];
+    const max = columnData[columnData.length - 1];
+    const sum = columnData.reduce((a, b) => a + b, 0);
+    const average = sum / columnData.length;
+    const median = columnData.length % 2 === 0
+      ? (columnData[columnData.length / 2 - 1] + columnData[columnData.length / 2]) / 2
+      : columnData[Math.floor(columnData.length / 2)];
+
+    return { min, max, average, median };
+  }
+
+  public getDataRange(tableName: string, columnName: string, start: number, end: number): any[] | null {
+    const tables = this.getDatabaseData();
+    if (!tables) return null;
+
+    const table = tables.find(t => t.name === tableName);
+    if (!table) return null;
+
+    const columnIndex = table.fields.findIndex(f => f.name === columnName);
+    if (columnIndex === -1) return null;
+
+    return table.data.slice(start, end + 1).map(row => row[columnIndex]);
+  }
+
+  // 添加一个方法来触发数据更新回调
+  private triggerDataUpdate(updatedTables: string[]): void {
+    this.dataUpdateCallbacks.forEach(callback => callback(updatedTables));
+  }
+
+  // 在数据更新时调用此方法
+  private updateData(updatedTables: string[]): void {
+    // 更新数据的逻辑
+    // ...
+
+    // 触发数据更新回调
+    this.triggerDataUpdate(updatedTables);
   }
 }
 

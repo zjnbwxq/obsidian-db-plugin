@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf, App, TextComponent, DropdownComponent, ButtonComponent, Notice, MarkdownView, Modal, Setting, FuzzySuggestModal, TFolder } from 'obsidian';
-import { DatabaseTable, DatabaseViewInterface, TableState, SortState, DatabasePluginInterface } from './types';
+import { DatabaseTable, DatabaseViewInterface, TableState, SortState, DatabasePluginInterface, DatabaseField, DatabaseFieldType } from './types';
 import { debug, info, warn, error } from './utils/logger';
 
 export const DATABASE_VIEW_TYPE = 'database-view';
@@ -68,7 +68,7 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
     // 添加调试代码
     debug(`顶部栏是否存在: ${!!topBar}`);
     debug(`顶部栏HTML: ${topBar.outerHTML}`);
-    debug(`导出下拉菜单是否存在: ${!!this.exportDropdown}`);
+    debug(`导出下拉菜单是存在: ${!!this.exportDropdown}`);
     debug(`导出按钮是否存在: ${!!this.exportButton}`);
     debug(`导入按钮是否存在: ${!!this.importButton}`);
     if (this.exportButton && this.importButton) {
@@ -86,7 +86,7 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
     // 清理工作
   }
 
-  public setTables(tables: DatabaseTable[]) {
+  public setTables(tables: DatabaseTable[]): void {
     this.tables = tables;
     this.tableStates = tables.map((table, index) => ({
       table,
@@ -141,32 +141,109 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
     const headerRow = tableElement.createEl('tr');
     table.fields.forEach(field => {
       const th = headerRow.createEl('th');
-      const headerContent = th.createEl('div', { cls: 'header-content' });
-      headerContent.createEl('span', { text: field, cls: 'column-name' });
-      const sortIndicator = headerContent.createEl('span', { cls: 'sort-indicator' });
-      
-      const currentSort = this.sortStates.get(table);
-      if (currentSort && currentSort.column === field) {
-        th.addClass('sorted');
-        th.addClass(currentSort.direction);
-        sortIndicator.setText(currentSort.direction === 'asc' ? '▲' : '▼');
-      } else {
-        sortIndicator.setText('⇅');
-      }
-
-      th.addEventListener('click', () => this.sortTable(table, field));
+      th.setText(field.name);
+      th.addEventListener('click', () => this.sortTable(table, field.name));
     });
 
     const filteredData = table.data.filter(row =>
-      row.some(cell => cell.toLowerCase().includes(state.searchTerm.toLowerCase()))
+      row.some(cell => String(cell).toLowerCase().includes(state.searchTerm.toLowerCase()))
     );
 
     filteredData.forEach(row => {
       const tr = tableElement.createEl('tr');
-      row.forEach(cell => {
-        tr.createEl('td', { text: cell });
+      row.forEach((cell, index) => {
+        const td = tr.createEl('td');
+        const field = table.fields[index];
+        this.renderCell(td, cell, field);
       });
     });
+  }
+
+  private renderCell(td: HTMLElement, cell: any, field: DatabaseField) {
+    switch (field.type) {
+      case 'string':
+      case 'number':
+      case 'boolean':
+        td.setText(String(cell));
+        break;
+      case 'date':
+        td.setText(new Date(cell).toLocaleDateString());
+        break;
+      case 'decimal':
+        td.setText(parseFloat(cell).toFixed(field.precision || 2));
+        break;
+      case 'geo':
+        td.setText(`(${cell.lat}, ${cell.lng})`);
+        break;
+      case 'vector':
+        td.setText(`[${cell.join(', ')}]`);
+        break;
+      case 'matrix':
+      case 'tensor':
+        td.setText(JSON.stringify(cell));
+        break;
+      case 'complex':
+        td.setText(`${cell.real} + ${cell.imag}i`);
+        break;
+      case 'uncertainty':
+        td.setText(`${cell.value} ± ${cell.uncertainty}`);
+        break;
+      case 'unit':
+        td.setText(`${cell.value} ${cell.unit}`);
+        break;
+      case 'color':
+        this.renderColorCell(td, cell, field);
+        break;
+      case 'spectrum':
+      case 'histogram':
+      case 'waveform':
+        td.setText('[数据]'); // 可以根据需要显示更详细的信息
+        break;
+      case 'graph':
+        td.setText(`[图: ${cell.nodes.length}节点, ${cell.edges.length}边]`);
+        break;
+      case 'molecule':
+        td.setText(`[分子: ${cell.atoms.length}原子]`);
+        break;
+      case 'sequence':
+        td.setText(cell.substring(0, 20) + (cell.length > 20 ? '...' : ''));
+        break;
+      // 新增的数据类型
+      case 'audio_signal':
+        td.setText(`[音频信号: ${field.sampleRate || 'N/A'}Hz]`);
+        break;
+      case 'frequency_response':
+        td.setText(`[频率响应: ${field.frequencyRange?.[0] || 'N/A'}-${field.frequencyRange?.[1] || 'N/A'}Hz]`);
+        break;
+      case 'impulse_response':
+      case 'transfer_function':
+      case 'spectrogram':
+      case 'directivity_pattern':
+        td.setText(`[${field.type}]`);
+        break;
+      case 'acoustic_impedance':
+      case 'reverberation_time':
+      case 'noise_level':
+      case 'sound_pressure_level':
+        td.setText(`${cell} ${field.unit || ''}`);
+        break;
+      default:
+        td.setText(String(cell));
+    }
+  }
+
+  private renderColorCell(td: HTMLElement, cell: any, field: DatabaseField) {
+    if (field.colorModel === 'RGB') {
+      td.setText(`RGB(${cell.r}, ${cell.g}, ${cell.b})`);
+      td.setAttr('style', `background-color: rgb(${cell.r}, ${cell.g}, ${cell.b}); color: ${this.getContrastColor(cell.r, cell.g, cell.b)}`);
+    } else {
+      td.setText(JSON.stringify(cell));
+    }
+  }
+
+  private getContrastColor(r: number, g: number, b: number): string {
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? 'black' : 'white';
   }
 
   private updateTable(state: TableState) {
@@ -180,10 +257,10 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
     const currentSort = this.sortStates.get(table) || { column: '', direction: 'asc' };
     const newDirection = currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc';
     
-    const columnIndex = table.fields.indexOf(column);
+    const columnIndex = table.fields.findIndex(field => field.name === column);
     table.data.sort((a, b) => {
-      const valueA = a[columnIndex].toLowerCase();
-      const valueB = b[columnIndex].toLowerCase();
+      const valueA = String(a[columnIndex]).toLowerCase();
+      const valueB = String(b[columnIndex]).toLowerCase();
       if (valueA < valueB) return newDirection === 'asc' ? -1 : 1;
       if (valueA > valueB) return newDirection === 'asc' ? 1 : -1;
       return 0;
@@ -201,7 +278,7 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
 
     if (format === 'csv') {
       content = tablesToExport.map(table => 
-        [table.fields.join(',')]
+        [table.fields.map(field => field.name).join(',')]
           .concat(table.data.map(row => row.join(',')))
           .join('\n')
       ).join('\n\n');
@@ -228,7 +305,7 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
     // 使用 Obsidian 的 vault.adapter.writeBinary 方法保存文件
     await this.app.vault.adapter.writeBinary(path.filePath, new TextEncoder().encode(content));
 
-    new Notice(`已导出 ${selectedTables.length} 个表格到 ${path.filePath}`);
+    new Notice(`已导出 ${selectedTables.length} 个表格��� ${path.filePath}`);
   }
 
   private async importData() {
@@ -266,7 +343,10 @@ export class DatabaseView extends ItemView implements DatabaseViewInterface {
     if (format === 'csv') {
       const lines = content.split('\n').map(line => line.trim()).filter(line => line);
       const table: DatabaseTable = { name: 'Imported Table', fields: [], data: [] };
-      table.fields = lines[0].split(',').map(field => field.trim());
+      table.fields = lines[0].split(',').map(fieldName => ({
+        name: fieldName.trim(),
+        type: 'string', // 默认类型，可以根据需要进行更复杂的类型推断
+      }));
       table.data = lines.slice(1).map(line => line.split(',').map(cell => cell.trim()));
       tables = [table];
     } else if (format === 'json') {
@@ -357,7 +437,7 @@ class ImportMethodModal extends Modal {
       .setName('从剪贴板导入')
       .setDesc('从剪贴板粘贴 CSV 或 JSON 数据')
       .addButton(button => button
-        .setButtonText('从剪贴板导入')
+        .setButtonText('从剪贴板导')
         .onClick(() => {
           this.close();
           this.callback('clipboard');
