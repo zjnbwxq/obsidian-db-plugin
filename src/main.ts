@@ -1,6 +1,7 @@
 import { Plugin, Notice, TFile, MarkdownView, Events, App, PluginManifest, PluginSettingTab, Setting, ButtonComponent } from 'obsidian';
 import { DatabaseView, DATABASE_VIEW_TYPE } from './DatabaseView';
 import { parseDatabase, DatabaseTable } from './databaseParser';
+import { debug, info, warn, error } from './utils/logger';
 import '../styles.css';
 
 interface DatabasePluginSettings {
@@ -17,7 +18,7 @@ export default class DatabasePlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
-    console.log('加载数据库插件');
+    info('加载数据库插件');
 
     this.registerView(
       DATABASE_VIEW_TYPE,
@@ -69,22 +70,22 @@ export default class DatabasePlugin extends Plugin {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeView) {
       const content = activeView.getViewData();
-      console.log('获取到的文件内容:', content);
+      debug(`获取到的文件内容: ${content}`);
       const tables = parseDatabase(content);
-      console.log('解析后的表格数据:', tables);
+      debug(`解析后的表格数据: ${JSON.stringify(tables)}`);
 
       if (Array.isArray(tables) && tables.length > 0) {
         await this.activateView();
         if (this.databaseView) {
-          console.log('更新数据库视图');
+          info('更新数据库视图');
           this.databaseView.setTables(tables);
           new Notice('数据库视图已更新');
         } else {
-          console.error('无法创建或获取数据库视图');
+          error('无法创建或获取数据库视图');
           new Notice('更新数据库视图失败');
         }
       } else {
-        console.error('解析结果无效:', tables);
+        error(`解析结果无效: ${JSON.stringify(tables)}`);
         new Notice('解析数据库失败，请检查文件格式');
       }
     } else {
@@ -104,20 +105,19 @@ export default class DatabasePlugin extends Plugin {
     await new Promise(resolve => setTimeout(resolve, 100));
     
     this.databaseView = leaf.view as DatabaseView;
-    console.log('数据库视图已激活:', this.databaseView);
+    info(`数据库视图已激活: ${this.databaseView ? 'success' : 'fail'}`);
     
     if (!this.databaseView) {
-      console.error('激活数据库视图失败');
+      error('激活数据库视图失败');
       new Notice('无法创建数据库视图');
     }
   }
 
   onunload() {
-    console.log('卸载数据库插件');
+    info('卸载数据库插件');
   }
 
   async saveData() {
-
     await this.saveSettings();
   }
 

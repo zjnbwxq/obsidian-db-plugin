@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, App, TextComponent, DropdownComponent, ButtonC
 import { DatabaseTable } from './databaseParser';
 import DatabasePlugin from './main';
 import { FuzzySuggestModal, TFolder } from 'obsidian';
+import { debug, info, warn, error } from './utils/logger';
 
 export const DATABASE_VIEW_TYPE = 'database-view';
 
@@ -47,7 +48,7 @@ export class DatabaseView extends ItemView {
       this.tableStates = tables.map((table, index) => ({ table, id: index + 1, searchTerm: '' }));
       this.renderView();
     } else {
-      console.error('setTables 收到无效数据:', tables);
+      error(`setTables 收到无效数据: ${JSON.stringify(tables).substring(0, 100)}...`);
     }
   }
 
@@ -234,7 +235,7 @@ export class DatabaseView extends ItemView {
       : [this.tableStates[parseInt(selectedValue)]?.table].filter(Boolean);
 
     if (tablesToExport.length === 0) {
-      console.error('No tables to export');
+      error('No tables to export');
       return;
     }
 
@@ -307,10 +308,10 @@ export class DatabaseView extends ItemView {
       try {
         await this.app.vault.create(`${folderPath}/${fileName}`, content);
         new Notice(`已创建数据库笔记: ${fileName}`);
-      } catch (error) {
-        console.error('创建数据库笔记时出错:', error);
-        if (isError(error)) {
-          new Notice(`创建数据库笔记失败: ${error.message}`);
+      } catch (err) {
+        error(`创建数据库笔记时出错: ${err instanceof Error ? err.message : String(err)}`);
+        if (err instanceof Error) {
+          new Notice(`创建数据库笔记失败: ${err.message}`);
         } else {
           new Notice('创建数据库笔记失败: 未知错误');
         }
@@ -389,7 +390,7 @@ export class DatabaseView extends ItemView {
   }
 
   public insertContent(content: string) {
-    console.log("Inserting content into DatabaseView:", content);
+    debug(`Inserting content into DatabaseView: ${content.substring(0, 100)}...`);
     const newTables = this.parseCSVContent(content);
     if (newTables.length > 0) {
       newTables.forEach(newTable => {
@@ -402,6 +403,7 @@ export class DatabaseView extends ItemView {
       this.renderView();
       new Notice(`已在数据库视图中插入 ${newTables.length} 个新表格`);
     } else {
+      warn('无法解析导入的内容');
       new Notice('无法解析导入的内容');
     }
   }
