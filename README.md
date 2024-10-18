@@ -138,7 +138,7 @@ Welcome for community contributions. If you have any ideas or suggestions, pleas
   <a href="#Simple-Database">English</a> | <a href="#简单数据库">中文</a>
 </div>
 
-# Simple Database
+# 简单数据库
 
 这是一个功能强大的 Obsidian 插件,用于创建和管理复杂数据库,支持多种高级数据类型。
 
